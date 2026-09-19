@@ -79,6 +79,9 @@ def handle_exception(e):
 
 @app.get("/fonts")
 def get_fonts():
+    global CATALOG
+    # Refresh on discovery so added files need no server restart.
+    CATALOG = font_catalog.scan_fonts(ENGINE_DIR / "fonts")
     res = []
     canonical = ["regular", "bold", "italic", "bold-italic"]
     for fam_name, fam in sorted(CATALOG.items(), key=lambda item: item[0].casefold()):

@@ -64,3 +64,60 @@ body {
   background-size: 64px 64px, 64px 64px, 16px 16px, 16px 16px;
   background-position: center;
 }
+
+.background-sticker {
+  /* Center in the margins outside the 1360px booth, including room for rotation. */
+  --sticker-inset: calc((100vw - 1360px) / 4 - 32px);
+  position: absolute;
+  display: none;
+  place-items: center;
+  width: clamp(40px, 5vw, 64px);
+  aspect-ratio: 1;
+  border: 3px solid white;
+  border-radius: 28%;
+  background: #fffdf0;
+  font-size: clamp(24px, 3vw, 40px);
+  opacity: .8;
+  line-height: 1;
+  box-shadow: 0 3px 0 #17321020, 0 6px 16px #1732100c;
+}
+@media (min-width: 1600px) and (min-height: 600px) {
+  .background-sticker { display: grid; }
+}
+
+/* The cat stays in its own space and pauses to wash its raised paw. */
+.cat-sway { transform-origin: 90px 135px; animation: cat-sway 12s ease-in-out infinite; }
+.cat-tail { transform-origin: 116px 128px; animation: cat-tail 4s ease-in-out infinite; }
+.cat-head { transform-origin: 88px 94px; animation: cat-groom 12s ease-in-out infinite; }
+.cat-paw { transform-origin: 62px 118px; animation: cat-paw 12s ease-in-out infinite; }
+.cat-eyes { transform-origin: 88px 69px; animation: cat-blink 6s ease-in-out infinite; }
+.cat-tongue { opacity: 0; transform-origin: 87px 87px; animation: cat-lick 12s ease-in-out infinite; }
+
+@keyframes cat-sway {
+  0%, 100% { transform: translateX(-8px) rotate(-2deg); }
+  25%, 80% { transform: translateX(8px) rotate(1deg); }
+}
+@keyframes cat-tail {
+  0%, 100% { transform: rotate(-7deg); }
+  50% { transform: rotate(9deg); }
+}
+@keyframes cat-groom {
+  0%, 30%, 78%, 100% { transform: rotate(0deg); }
+  40%, 50%, 60%, 70% { transform: translate(-9px, 6px) rotate(20deg); }
+  45%, 55%, 65% { transform: translate(-7px, 3px) rotate(14deg); }
+}
+@keyframes cat-paw {
+  0%, 30%, 78%, 100% { transform: translateY(15px) rotate(-18deg); }
+  40%, 70% { transform: translate(6px, -3px) rotate(12deg); }
+}
+@keyframes cat-blink {
+  0%, 43%, 49%, 100% { transform: scaleY(1); }
+  46% { transform: scaleY(.08); }
+}
+@keyframes cat-lick {
+  0%, 39%, 45%, 49%, 55%, 59%, 65%, 69%, 75%, 100% { opacity: 0; transform: scaleY(.3); }
+  42%, 52%, 62%, 72% { opacity: 1; transform: scaleY(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .booth-cat * { animation: none; }
+}

@@ -11,20 +11,29 @@ const label = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 function useSpecimenFaces(fonts: FontFamily[]) {
   const [faces, setFaces] = useState<Record<string, string>>({});
   useEffect(() => {
+    let cancelled = false;
+    const loaded: FontFace[] = [];
     // ponytail: loads every family up front; add an IntersectionObserver if the catalog grows past a few dozen.
-    fonts.forEach((f, i) => {
+    fonts.forEach((f) => {
       // Script faces are hairline-thin at tile size, so show their bold cut when there is one.
       const style = f.category === "script" && f.styles.includes("bold") ? "bold" : f.styles.includes("regular") ? "regular" : f.styles[0];
-      const name = `specimen-${i}`;
-      const face = new FontFace(name, `url('/font-file?family=${encodeURIComponent(f.family)}&style=${style}')`);
+      const encodedFamily = encodeURIComponent(f.family).replace(/'/g, "%27");
+      const name = `specimen-${encodedFamily}`;
+      const face = new FontFace(name, `url('/font-file?family=${encodedFamily}&style=${style}')`);
       face
         .load()
         .then(() => {
+          if (cancelled) return;
           document.fonts.add(face);
+          loaded.push(face);
           setFaces((prev) => ({ ...prev, [f.family]: name }));
         })
         .catch(() => {}); // tile falls back to the UI font
     });
+    return () => {
+      cancelled = true;
+      loaded.forEach((face) => document.fonts.delete(face));
+    };
   }, [fonts]);
   return faces;
 }

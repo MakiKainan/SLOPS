@@ -178,7 +178,7 @@ The Express server forwards the following endpoints to the internal Python Flask
      "My Custom Script Font": "script"
    }
    ```
-3. Restart the server. The font catalog automatically registers the font and its available weights.
+3. The picker discovers new fonts within five seconds, with no server restart. Names come from filenames without the extension; standard style suffixes such as `-Regular` and `-Bold` are grouped (for example, `MyFont-Regular.ttf` and `MyFont-Bold.ttf` appear as `MyFont`). Category tags can use this filename-based name or the font's embedded family name. Unsupported variable fonts and invalid files are skipped.
 
 ### Adding Color Presets
 

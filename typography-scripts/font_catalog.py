@@ -1,6 +1,7 @@
 """Scan a folder of font files into family -> style -> path, for building font pickers."""
 from dataclasses import dataclass
 import json
+import re
 from pathlib import Path
 import warnings
 
@@ -39,7 +40,7 @@ def _load_categories(folder):
 
 
 def scan_fonts(folder):
-    """Scan folder recursively for .ttf/.otf files and group them by family."""
+    """Discover fonts by filename, grouping standard style suffixes together."""
     folder = Path(folder)
     categories = _load_categories(folder)
     families = {}
@@ -51,15 +52,13 @@ def scan_fonts(folder):
                 if 'fvar' in font:
                     warnings.warn(f'Skipping variable font {path}: axis selection is not supported.')
                     continue
-                name = _family_name(font)
-                if not name:
-                    warnings.warn(f'Skipping {path}: no family name.')
-                    continue
+                metadata_name = _family_name(font)
+                name = re.sub(r'[-_ ](?:regular|bold[-_ ]?italic|bold|italic)$', '', path.stem, flags=re.I) or path.stem
                 style = _style_name(font)
         except Exception as exc:
             warnings.warn(f'Skipping {path}: {exc}')
             continue
-        family = families.setdefault(name, FontFamily(name, {}, categories.get(name)))
+        family = families.setdefault(name, FontFamily(name, {}, categories.get(name, categories.get(metadata_name))))
         if style in family.styles:
             warnings.warn(f'Duplicate {name} {style} font; keeping {family.styles[style]}, ignoring {path}.')
             continue

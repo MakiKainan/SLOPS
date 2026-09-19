@@ -4,6 +4,8 @@ import { getJSON, mapError, postRender, b64ToBlobUrl, type FontFamily, type Pres
 import { useRender } from "./useRender";
 import FontPicker from "./FontPicker";
 import Preview, { type PreviewError, type Status } from "./Preview";
+import Cat from "./Cat";
+import Background from "./Background";
 
 const SAMPLE = "Your Name";
 const CAP = 24;
@@ -64,6 +66,30 @@ export default function App() {
       .catch((e) => e.name !== "AbortError" && setBootError(e.message));
     return () => ctrl.abort();
   }, [bootTry]);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const refreshFonts = async () => {
+      try {
+        const next = await getJSON<FontFamily[]>("/fonts", ctrl.signal);
+        if (ctrl.signal.aborted) return;
+        setFonts((prev) => JSON.stringify(prev) === JSON.stringify(next) ? prev : next);
+        setD((prev) => {
+          const family = next.find((f) => f.family === prev.family) ?? next[0];
+          if (!family) return { ...prev, family: null };
+          const style = family.styles.includes(prev.style) ? prev.style : fallbackStyle(family);
+          return prev.family === family.family && prev.style === style ? prev : { ...prev, family: family.family, style };
+        });
+      } catch {
+        // Keep the current picker during temporary connection failures.
+      } finally {
+        if (!ctrl.signal.aborted) timer = setTimeout(refreshFonts, 5000);
+      }
+    };
+    timer = setTimeout(refreshFonts, 5000);
+    return () => { ctrl.abort(); clearTimeout(timer); };
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -161,7 +187,8 @@ export default function App() {
 
   return (
     <>
-      <div className="mx-auto flex min-h-screen max-w-[1360px] flex-col gap-8 px-4 py-6 sm:px-6 lg:gap-10 lg:px-10 lg:py-10">
+      <Background />
+      <div className="relative mx-auto flex min-h-screen max-w-[1360px] flex-col gap-8 px-4 py-6 sm:px-6 lg:gap-10 lg:px-10 lg:py-10">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <h1>
             <span className="sr-only">SLOPS sticker booth</span>
@@ -200,6 +227,7 @@ export default function App() {
                 </button>
               </div>
             </div>
+            <Cat />
           </aside>
 
           <div className="order-2 flex flex-col gap-6 lg:order-none">
