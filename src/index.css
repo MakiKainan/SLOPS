@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "Fredoka";
+  src: url("/fredoka.ttf") format("truetype");
+  font-weight: 300 700;
+  font-display: swap;
+}
+
+@theme {
+  --font-ui: "Fredoka", "Nunito", ui-rounded, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-sage: #98cd89;
+  --color-sage-deep: #70a960;
+  --color-ink: #173210;
+  --color-ink-deep: #0e2009;
+  --color-ink-soft: #496742;
+  --color-paper: #ffffff;
+  --color-tint: #ecf7e9;
+  --color-tint-2: #ddefd7;
+  --color-line: #cfe3c9;
+  --color-butter: #ffe9a8;
+  --color-butter-ink: #5b4300;
+  --color-tomato: #e4573d;
+  --color-tomato-bg: #ffe4dd;
+  --color-tomato-ink: #9a2a14;
+}
+
+html,
+body {
+  background: var(--color-sage);
+  color: var(--color-ink);
+  font-family: var(--font-ui);
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-ink);
+  outline-offset: 3px;
+}
+
+/* Staggered entrance for the step cards (delay set inline) */
+@keyframes stick {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+.stick-in {
+  animation: stick 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .stick-in {
+    animation: none;
+  }
+}
+
+/* Cutting-mat grid behind the preview */
+.mat {
+  background-color: var(--color-sage-deep);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.28) 1.5px, transparent 0),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.28) 1.5px, transparent 0),
+    linear-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 0),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1px, transparent 0);
+  background-size: 64px 64px, 64px 64px, 16px 16px, 16px 16px;
+  background-position: center;
+}

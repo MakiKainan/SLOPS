@@ -1,0 +1,2 @@
+-r typography-scripts/requirements.txt
+flask>=3

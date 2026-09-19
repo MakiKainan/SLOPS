@@ -1,0 +1,6 @@
+{
+  "name": "SLOPS Sticker Booth",
+  "description": "A local sticker and typography booth where visitors design and download die-cut stickers with live preview and custom styling.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
