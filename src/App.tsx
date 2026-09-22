@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, Circle, Download, RotateCcw, Square } from "lucide-react";
-import { getJSON, mapError, postRender, b64ToBlobUrl, type FontFamily, type Preset, type RenderPayload, type Shape, type Style } from "./api";
+import { ArrowRight, Check, Circle, Download, RotateCcw, Square } from "lucide-react";
+import { getJSON, mapError, postRender, b64ToBlobUrl, type FontFamily, type Preset, type RenderPayload, type Shape, type Size, type Style } from "./api";
 import { useRender } from "./useRender";
 import FontPicker from "./FontPicker";
 import Preview, { type PreviewError, type Status } from "./Preview";
 import Cat from "./Cat";
 import Background from "./Background";
+import { PrintSheet, SheetPicker, SIZES, fit, type Slot } from "./Sheet";
 
 const SAMPLE = "Your Name";
 const CAP = 24;
@@ -19,7 +20,10 @@ interface Design {
   preset: number;
   shape: Shape;
   guide: boolean;
+  size: Size;
 }
+
+type SheetSlot = Slot & { design: Design };
 
 const fallbackStyle = (f: FontFamily): Style => (f.styles.includes("regular") ? "regular" : f.styles[0]);
 
@@ -48,7 +52,10 @@ export default function App() {
   const [fonts, setFonts] = useState<FontFamily[]>([]);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [bootError, setBootError] = useState<string | null>(null);
-  const [d, setD] = useState<Design>({ text: "", family: null, style: "regular", preset: 0, shape: "square", guide: false });
+  const [d, setD] = useState<Design>({ text: "", family: null, style: "regular", preset: 0, shape: "square", guide: false, size: "m" });
+  const [sheet, setSheet] = useState<(SheetSlot | null)[]>([null, null, null, null]);
+  const [active, setActive] = useState(0);
+  const [confirming, setConfirming] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<PreviewError | null>(null);
   const [toast, setToast] = useState<{ msg: string; undo?: () => void } | null>(null);
@@ -128,22 +135,26 @@ export default function App() {
   const snapshot = useRef<Design | null>(null);
   const startOver = () => {
     snapshot.current = d;
-    update({ text: "", family: fonts[0]?.family ?? null, style: fonts[0] ? fallbackStyle(fonts[0]) : "regular", preset: 0, shape: "square", guide: false });
+    update({ text: "", family: fonts[0]?.family ?? null, style: fonts[0] ? fallbackStyle(fonts[0]) : "regular", preset: 0, shape: "square", guide: false, size: "m" });
     setToast({ msg: "Started over.", undo: () => snapshot.current && update(snapshot.current) });
+  };
+
+  /** 1024 px blob URL, or null after showing the error in the preview. */
+  const renderFull = async (p: RenderPayload, onRetry: () => void) => {
+    const r = await postRender(p, 30000);
+    if (r.ok) return b64ToBlobUrl(r.png_base64);
+    const info = mapError(r.code, r.message);
+    setDownloadError({ headline: "Couldn't make the 1024 px file", detail: r.message, fix: info.fix, onRetry: info.retry ? onRetry : undefined });
+    return null;
   };
 
   const download = async () => {
     if (!payload || isSample || !result?.ok) return;
     const p = { ...payload, size: 1024 as const };
     setDownloading(true);
-    const r = await postRender(p, 30000);
+    const url = await renderFull(p, download);
     setDownloading(false);
-    if (!r.ok) {
-      const info = mapError(r.code, r.message);
-      setDownloadError({ headline: "Couldn't make the 1024 px file", detail: r.message, fix: info.fix, onRetry: info.retry ? download : undefined });
-      return;
-    }
-    const url = b64ToBlobUrl(r.png_base64);
+    if (!url) return;
     const filename = `slops-${slug(p.text)}-${p.shape}.png`;
     const a = document.createElement("a");
     a.href = url;
@@ -151,6 +162,34 @@ export default function App() {
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
     setToast({ msg: `Saved ${filename}` });
+  };
+
+  const confirm = async () => {
+    if (!payload || !canDownload) return;
+    const design = d, at = active, slotAlt = alt; // the user may keep editing while this renders
+    setConfirming(true);
+    const png = await renderFull({ ...payload, size: 1024 }, confirm);
+    setConfirming(false);
+    if (!png) return;
+    const next = sheet.map((s, i) => (i === at ? { design, png, alt: slotAlt } : s));
+    if (sheet[at]) URL.revokeObjectURL(sheet[at].png);
+    setSheet(next);
+    const empty = [1, 2, 3].map((k) => (at + k) % 4).find((i) => !next[i]);
+    if (empty === undefined) return setToast({ msg: "Sheet full. Ready to print!" });
+    setActive(empty);
+    update({ text: "" }); // keep font, color, shape and size for the next quarter
+    setToast({ msg: `Quarter ${at + 1} saved. Now designing quarter ${empty + 1}.` });
+  };
+
+  const pickQuarter = (i: number) => {
+    setActive(i);
+    const s = sheet[i];
+    if (s) update(s.design);
+  };
+
+  const clearQuarter = (i: number) => {
+    URL.revokeObjectURL(sheet[i]!.png);
+    setSheet((prev) => prev.map((s, k) => (k === i ? null : s)));
   };
 
   // Preview error / status / download-button copy
@@ -194,16 +233,20 @@ export default function App() {
             <span className="sr-only">SLOPS sticker booth</span>
             <Logo />
           </h1>
-          <p className="text-lg font-medium text-ink/80">Make a die-cut sticker in 6 steps.</p>
+          <p className="text-lg font-medium text-ink/80">Make a die-cut sticker in 7 steps, 4 per A4 sheet.</p>
         </header>
 
         <main className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-10">
           {/* On mobile the aside dissolves (display: contents) so preview and actions can be ordered around the steps. */}
           <aside className="contents lg:sticky lg:top-10 lg:flex lg:flex-col lg:gap-5 lg:self-start">
             <div className="sticky top-0 z-10 order-1 -mx-4 bg-sage px-4 py-3 sm:-mx-6 sm:px-6 lg:static lg:order-none lg:m-0 lg:p-0">
-              <div className="mx-auto w-full max-w-[300px] sm:max-w-[360px] lg:max-w-[min(100%,calc(100vh-17rem))]">
+              <div className="mx-auto w-full max-w-[300px] sm:max-w-[360px] lg:max-w-[min(100%,calc(100vh-29rem))]">
                 <Preview src={result?.ok ? result.blobUrl : undefined} alt={alt} sample={isSample} busy={busy} error={error} status={status} />
               </div>
+            </div>
+
+            <div className="order-3 lg:order-none">
+              <SheetPicker slots={sheet} active={active} onPick={pickQuarter} onClear={clearQuarter} />
             </div>
 
             <div className="sticky bottom-0 z-10 order-3 -mx-4 bg-sage px-4 pt-2 pb-4 sm:-mx-6 sm:px-6 lg:static lg:order-none lg:m-0 lg:p-0">
@@ -310,9 +353,30 @@ export default function App() {
                 </div>
               </Step>
             </div>
+
+            <Step n={7} i={6} title="Size" meta={`${SIZES[d.size].label} · ${SIZES[d.size].mm} mm · ${fit(d.size).cols * fit(d.size).rows} per quarter`}>
+              <Segmented
+                name="size"
+                value={d.size}
+                onChange={(size) => update({ size })}
+                options={(Object.keys(SIZES) as Size[]).map((s) => ({ value: s, label: <span title={SIZES[s].label}>{s.toUpperCase()}</span> }))}
+              />
+            </Step>
+
+            <button
+              type="button"
+              onClick={confirm}
+              disabled={!canDownload || confirming}
+              className="flex h-16 items-center justify-center gap-3 rounded-full bg-ink text-lg font-semibold text-paper hover:bg-ink-deep active:translate-y-0.5 disabled:bg-paper/60 disabled:text-ink-soft disabled:active:translate-y-0"
+            >
+              {confirming ? "Saving…" : sheet[active] ? `Update quarter ${active + 1}` : `Confirm quarter ${active + 1}`}
+              <ArrowRight className="size-5" aria-hidden />
+            </button>
           </div>
         </main>
       </div>
+
+      <PrintSheet slots={sheet} />
 
       {toast && (
         <div role="status" aria-live="polite" className="fixed bottom-24 left-1/2 z-50 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-3 rounded-full bg-ink px-5 py-3 font-medium text-paper shadow-lg lg:bottom-6">

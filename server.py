@@ -200,7 +200,7 @@ def main():
     port = int(os.environ.get("PORT", 8765))
     host = "127.0.0.1"
     # API only; the UI is served by server.ts (npm run dev). --no-open is still accepted and ignored.
-    print(f"SLOPS booth API → http://127.0.0.1:{port}  (Ctrl+C to stop)", flush=True)
+    print(f"SLOPS booth API -> http://127.0.0.1:{port}  (Ctrl+C to stop)", flush=True)
     app.run(host=host, port=port, threaded=True)
 
 

@@ -121,3 +121,16 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .booth-cat * { animation: none; }
 }
+
+/* A4 sheet: 2 × 2 quarters. Rows are a hair under 148.5mm so rounding never spills onto a blank page 2. */
+@page { size: A4; margin: 0; }
+@media print {
+  html, body { background: white; margin: 0; }
+  #root > :not(#print-sheet) { display: none !important; }
+  #print-sheet {
+    display: grid !important;
+    grid-template: repeat(2, 148.4mm) / repeat(2, 105mm);
+    print-color-adjust: exact;
+  }
+  .print-quarter { outline: 0.2mm dashed #c8c8c8; outline-offset: -0.1mm; }
+}
