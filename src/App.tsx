@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowRight, Check, Circle, Download, RotateCcw, Square } from "lucide-react";
+import { ArrowRight, Check, Circle, Download, Hexagon, RotateCcw, Square, Star } from "lucide-react";
 import { getJSON, mapError, postRender, b64ToBlobUrl, type FontFamily, type Preset, type RenderPayload, type Shape, type Size, type Style } from "./api";
 import { useRender } from "./useRender";
 import FontPicker from "./FontPicker";
@@ -10,8 +10,8 @@ import { PrintSheet, SheetPicker, SIZES, fit, type Slot } from "./Sheet";
 
 const SAMPLE = "Your Name";
 const CAP = 24;
-const STYLE_LABELS: Record<Style, string> = { regular: "Regular", bold: "Bold", italic: "Italic", "bold-italic": "Bold italic" };
-const STYLE_CSS: Record<Style, string> = { regular: "", bold: "font-bold", italic: "italic", "bold-italic": "font-bold italic" };
+const STYLE_LABELS: Record<Style, string> = { regular: "Regular", bold: "Bold", italic: "Italic", "bold-italic": "Bold italic", underline: "Underline" };
+const STYLE_CSS: Record<Style, string> = { regular: "", bold: "font-bold", italic: "italic", "bold-italic": "font-bold italic", underline: "underline underline-offset-4" };
 
 interface Design {
   text: string;
@@ -240,8 +240,11 @@ export default function App() {
           {/* On mobile the aside dissolves (display: contents) so preview and actions can be ordered around the steps. */}
           <aside className="contents lg:sticky lg:top-10 lg:flex lg:flex-col lg:gap-5 lg:self-start">
             <div className="sticky top-0 z-10 order-1 -mx-4 bg-sage px-4 py-3 sm:-mx-6 sm:px-6 lg:static lg:order-none lg:m-0 lg:p-0">
-              <div className="mx-auto w-full max-w-[300px] sm:max-w-[360px] lg:max-w-[min(100%,calc(100vh-29rem))]">
-                <Preview src={result?.ok ? result.blobUrl : undefined} alt={alt} sample={isSample} busy={busy} error={error} status={status} />
+              <div className="mx-auto grid w-full max-w-[520px] grid-cols-[clamp(64px,18vw,128px)_minmax(0,1fr)] items-center gap-3 sm:gap-4">
+                <Cat />
+                <div className="min-w-0">
+                  <Preview src={result?.ok ? result.blobUrl : undefined} alt={alt} sample={isSample} busy={busy} error={error} status={status} />
+                </div>
               </div>
             </div>
 
@@ -270,7 +273,6 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <Cat />
           </aside>
 
           <div className="order-2 flex flex-col gap-6 lg:order-none">
@@ -297,7 +299,7 @@ export default function App() {
               )}
             </Step>
 
-            <Step n={3} i={2} title="Style" meta={famObj && famObj.styles.length < 4 ? `${famObj.styles.length} of 4 in this font` : undefined}>
+            <Step n={3} i={2} title="Style">
               <Segmented
                 name="style"
                 value={d.style}
@@ -335,6 +337,8 @@ export default function App() {
                   options={[
                     { value: "square" as Shape, label: <><Square className="size-4" aria-hidden /> Square</> },
                     { value: "circle" as Shape, label: <><Circle className="size-4" aria-hidden /> Circle</> },
+                    { value: "hexagon" as Shape, label: <><Hexagon className="size-4" aria-hidden /> Hexagon</> },
+                    { value: "star" as Shape, label: <><Star className="size-4" aria-hidden /> Star</> },
                   ]}
                 />
               </Step>
@@ -418,9 +422,9 @@ function Step({ n, i, title, meta, children }: { n: number; i: number; title: Re
 
 function Segmented<T extends string>({ name, value, onChange, options }: { name: string; value: T; onChange: (v: T) => void; options: { value: T; label: ReactNode }[] }) {
   return (
-    <div role="radiogroup" className="flex w-full gap-1 rounded-2xl bg-tint p-1">
+    <div role="radiogroup" className="flex w-full flex-wrap gap-1 rounded-2xl bg-tint p-1">
       {options.map((o) => (
-        <div key={o.value} className="flex-1">
+        <div key={o.value} className={(name === "shape" || name === "style") ? "min-w-24 flex-1" : "flex-1"}>
           <input type="radio" name={name} id={`${name}-${o.value}`} className="peer sr-only" checked={o.value === value} onChange={() => onChange(o.value)} />
           <label
             htmlFor={`${name}-${o.value}`}

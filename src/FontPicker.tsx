@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FontFamily, Style } from "./api";
 
-const STYLES: Style[] = ["regular", "bold", "italic", "bold-italic"];
+const STYLES: Style[] = ["regular", "bold", "italic", "bold-italic", "underline"];
 const OTHER = "Other";
 
 const catOf = (f: FontFamily) => f.category ?? OTHER;
@@ -100,7 +100,7 @@ export default function FontPicker({ fonts, value, onChange, specimen }: Props) 
                 </span>
                 <span className="flex items-center justify-between gap-3 text-sm font-medium opacity-80">
                   <span className="truncate">{f.family}</span>
-                  <span className="flex shrink-0 gap-1" aria-label={`${f.styles.length} of 4 styles`}>
+                  <span className="flex shrink-0 gap-1" aria-label={`${f.styles.length} of 5 styles`}>
                     {STYLES.map((s) => (
                       <span
                         key={s}

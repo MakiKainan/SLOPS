@@ -55,12 +55,12 @@ export default function Preview({ src, alt, sample, busy, error, status }: Props
 
   return (
     <section aria-label="Sticker preview" aria-busy={busy} className="flex flex-col gap-4">
-      <div className="mat relative grid aspect-square place-items-center overflow-hidden rounded-[2rem]">
+      <div className={`mat relative grid place-items-center overflow-hidden rounded-[2rem] ${error ? "p-4" : "aspect-square"}`}>
         {error ? (
-          <div role="alert" className="absolute inset-6 flex flex-col items-center justify-center gap-3 rounded-3xl border-[3px] border-dashed border-tomato bg-tomato-bg p-8 text-center">
-            <AlertCircle className="size-10 text-tomato-ink" aria-hidden />
+          <div role="alert" className="flex w-full min-w-0 flex-col items-center justify-center gap-3 rounded-3xl border-[3px] border-dashed border-tomato bg-tomato-bg p-4 text-center">
+            <AlertCircle className="size-10 shrink-0 text-tomato-ink" aria-hidden />
             <h2 className="text-xl font-semibold text-tomato-ink">{error.headline}</h2>
-            {error.detail && <p className="font-medium break-words">“{error.detail}”</p>}
+            {error.detail && <p className="w-full font-medium [overflow-wrap:anywhere]">“{error.detail}”</p>}
             <p className="font-medium text-ink-soft">{error.fix}</p>
             {error.onRetry && (
               <button type="button" onClick={error.onRetry} className="mt-2 h-11 rounded-full bg-tint px-6 font-semibold hover:bg-tint-2">

@@ -1,8 +1,8 @@
 /** A quiet little booth companion; purely decorative. */
 export default function Cat() {
   return (
-    <div aria-hidden="true" className="cat-space pointer-events-none order-4 flex justify-center lg:fixed lg:top-1/2 lg:left-0 lg:z-20 lg:w-56 lg:-translate-y-1/2 xl:w-64">
-      <svg className="booth-cat lg:h-auto lg:w-full" width="180" height="130" viewBox="0 0 180 150" focusable="false">
+    <div aria-hidden="true" className="cat-space pointer-events-none flex min-w-0 justify-center">
+      <svg className="booth-cat h-auto w-full" width="180" height="150" viewBox="0 0 180 150" focusable="false">
         <ellipse cx="91" cy="139" rx="53" ry="6" fill="#173210" opacity=".12" />
         <g className="cat-sway">
           <path className="cat-tail" d="M113 128C151 142 163 107 143 100" fill="none" stroke="#191e1b" strokeWidth="13" strokeLinecap="round" />

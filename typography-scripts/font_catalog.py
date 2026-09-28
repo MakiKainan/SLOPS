@@ -7,7 +7,7 @@ import warnings
 
 from fontTools.ttLib import TTFont
 
-STYLES = ('regular', 'bold', 'italic', 'bold-italic')
+STYLES = ('regular', 'bold', 'italic', 'bold-italic', 'underline')
 
 
 @dataclass(frozen=True)
@@ -67,15 +67,19 @@ def scan_fonts(folder):
 
 
 def available_styles(family):
-    """Styles this family actually ships, in a stable UI order."""
-    return [s for s in STYLES if s in family.styles]
+    """Native and synthesized styles, in a stable UI order."""
+    return list(STYLES)
 
 
 def resolve_font(catalog, family, style='regular'):
-    """Return the file for family+style; raises ValueError naming what's available."""
+    """Prefer native styles; the renderer synthesizes missing weight and slant."""
     if family not in catalog:
         raise ValueError(f'Unknown font family: {family!r}. Available: {sorted(catalog)}')
     fam = catalog[family]
-    if style not in fam.styles:
-        raise ValueError(f'{family} has no {style} style. Available styles: {available_styles(fam)}')
-    return fam.styles[style]
+    if style not in STYLES:
+        raise ValueError(f'Unknown style: {style!r}. Available styles: {STYLES}')
+    candidates = [style]
+    if style == 'bold-italic':
+        candidates += ['bold', 'italic']
+    candidates += ['regular', *fam.styles]
+    return next(fam.styles[s] for s in candidates if s in fam.styles)

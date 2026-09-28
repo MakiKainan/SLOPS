@@ -4,5 +4,15 @@
   {"name": "Ink on mint", "foreground": "#171717", "background": "#CBF3DC"},
   {"name": "Snow on purple", "foreground": "#FFFFFF", "background": "#7030A0"},
   {"name": "Ink on peach", "foreground": "#171717", "background": "#FFD9BF"},
-  {"name": "Snow on red", "foreground": "#FFFFFF", "background": "#BE2637"}
+  {"name": "Snow on red", "foreground": "#FFFFFF", "background": "#BE2637"},
+  {"name": "Ink on pink", "foreground": "#171717", "background": "#FFC8DD"},
+  {"name": "Ink on lavender", "foreground": "#171717", "background": "#DDD1FF"},
+  {"name": "Ink on sky", "foreground": "#171717", "background": "#BDE0FE"},
+  {"name": "Ink on lemon", "foreground": "#171717", "background": "#FFEA80"},
+  {"name": "Ink on coral", "foreground": "#171717", "background": "#FFA08C"},
+  {"name": "Snow on navy", "foreground": "#FFFFFF", "background": "#243B6B"},
+  {"name": "Cream on forest", "foreground": "#FFF0CF", "background": "#285943"},
+  {"name": "Cream on cocoa", "foreground": "#FFF0CF", "background": "#654236"},
+  {"name": "Pink on plum", "foreground": "#FFC8DD", "background": "#542344"},
+  {"name": "Lemon on charcoal", "foreground": "#FFEA80", "background": "#242424"}
 ]

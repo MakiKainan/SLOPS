@@ -19,9 +19,9 @@ def test_live_discovery():
         client = server.app.test_client()
         assert client.get('/fonts').get_json() == []
         for style in ('Regular', 'Bold'):
-            shutil.copyfile(source / f'BDSans-{style}.ttf', folder / f"Cat's Font-{style}.ttf")
+            shutil.copyfile(source / f'Beautifully Delicious Sans-{style}.ttf', folder / f"Cat's Font-{style}.ttf")
         assert client.get('/fonts').get_json() == [
-            {'family': "Cat's Font", 'category': None, 'styles': ['regular', 'bold']}
+            {'family': "Cat's Font", 'category': None, 'styles': list(server.font_catalog.STYLES)}
         ]
         response = client.get('/font-file', query_string={'family': "Cat's Font", 'style': 'bold'})
         assert response.status_code == 200
@@ -40,7 +40,8 @@ def test_live_discovery():
             assert caught
         (folder / 'Broken.ttf').unlink()
         (folder / "Cat's Font-Bold.ttf").unlink()
-        assert client.get('/fonts').get_json()[0]['styles'] == ['regular']
+        assert client.get('/fonts').get_json()[0]['styles'] == list(server.font_catalog.STYLES)
+        assert server.font_catalog.resolve_font(server.CATALOG, "Cat's Font", 'bold').name == "Cat's Font-Regular.ttf"
         (folder / "Cat's Font-Regular.ttf").rename(folder / 'New Name.ttf')
         assert client.get('/fonts').get_json()[0]['family'] == 'New Name'
     print('PASS: live discovery, filename names, styles, serving, rendering, invalid files, removal and rename')

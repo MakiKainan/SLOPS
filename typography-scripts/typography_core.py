@@ -3,7 +3,7 @@
 Used by both generate_dataset.py (the fixed LoRA-dataset builder) and
 make_typography.py (the general-purpose, any-font typography renderer).
 """
-from PIL import Image, ImageChops, ImageColor
+from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageOps
 import freetype
 import uharfbuzz as hb
 
@@ -29,7 +29,7 @@ def layout(text):
     return [' '.join(words[:split]), ' '.join(words[split:])]
 
 
-def shape_line(font_path, text, pixels=600):
+def shape_line(font_path, text, pixels=600, *, style='regular', underline=False):
     # HarfBuzz preserves OpenType joins, kerning and ligatures on Windows and Linux.
     face = freetype.Face(str(font_path))
     face.set_pixel_sizes(0, pixels)
@@ -65,10 +65,22 @@ def shape_line(font_path, text, pixels=600):
     for x, y, glyph in glyphs:
         region = (x-left, y-top, x-left+glyph.width, y-top+glyph.height)
         result.paste(ImageChops.lighter(result.crop(region), glyph), region)
+    if 'bold' in style and not face.style_flags & freetype.FT_STYLE_FLAG_BOLD:
+        radius = max(1, round(pixels * .012))
+        result = ImageOps.expand(result, radius).filter(ImageFilter.MaxFilter(radius * 2 + 1))
+    if 'italic' in style and not face.style_flags & freetype.FT_STYLE_FLAG_ITALIC:
+        slant = .20
+        result = result.transform((result.width + round(result.height * slant) + 1, result.height),
+                                  Image.Transform.AFFINE, (1, slant, -slant * result.height, 0, 1, 0),
+                                  resample=Image.Resampling.BICUBIC)
+    if underline:
+        thickness = max(1, round(pixels * .025))
+        result = ImageOps.expand(result, (0, 0, 0, thickness * 3))
+        ImageDraw.Draw(result).rectangle((0, result.height - thickness, result.width - 1, result.height - 1), fill=255)
     return result
 
 
-def render(fonts, lines, color, size, background='#FFFFFF', *, shape_pixels=600):
+def render(fonts, lines, color, size, background='#FFFFFF', *, shape_pixels=600, style='regular', underline=False):
     """Composite lines of shaped text into a size x size RGB image.
 
     shape_pixels sets the FreeType/HarfBuzz shaping resolution per line before
@@ -79,7 +91,7 @@ def render(fonts, lines, color, size, background='#FFFFFF', *, shape_pixels=600)
     pixels_list = [shape_pixels] * len(lines) if isinstance(shape_pixels, int) else list(shape_pixels)
     if len(pixels_list) != len(lines):
         raise ValueError('shape_pixels must have one entry per line')
-    masks = [shape_line(font, line, px) for font, line, px in zip(fonts, lines, pixels_list)]
+    masks = [shape_line(font, line, px, style=style, underline=underline) for font, line, px in zip(fonts, lines, pixels_list)]
     if len(masks) == 2:
         top, bottom = masks
         scale = min(top.width / bottom.width, 2 * top.height / bottom.height)

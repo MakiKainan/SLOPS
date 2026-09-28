@@ -1,7 +1,8 @@
-"""Render text as a sticker-ready typography image: any font, any two colors, square or circle."""
+"""Render text as a sticker-ready typography image with simple cut-out shapes."""
 import argparse
 from io import BytesIO
 import json
+from math import cos, sin, pi
 from pathlib import Path
 import sys
 import warnings
@@ -10,9 +11,11 @@ from fontTools.ttLib import TTFont
 from PIL import Image, ImageDraw
 
 from typography_core import contrast, layout, render
+from font_catalog import STYLES
 
 PAPER = '#FFFFFF'
 CIRCLE_INSET = 0.65  # Square-inscribed-in-circle limit is ~0.707; this leaves margin.
+SHAPES = ('square', 'circle', 'hexagon', 'star')
 SUPERSAMPLE = 4
 
 
@@ -23,11 +26,34 @@ def font_coverage(font_path, text):
     return sorted({c for c in text if not c.isspace() and ord(c) not in glyphs})
 
 
-def _circle_canvas(size, background):
+def _draw_shape(draw, size, shape, *, fill=None, outline=None, width=1):
+    inset = width // 2 if outline is not None else 0
+    left, top, right, bottom = inset, inset, size - 1 - inset, size - 1 - inset
+    box = (left, top, right, bottom)
+    if shape == 'circle':
+        draw.ellipse(box, fill=fill, outline=outline, width=width)
+    elif shape == 'star':
+        center = (size - 1) / 2
+        radius = (right - left) / 2
+        points = [(center + radius * (1 if i % 2 == 0 else .5) * cos(-pi / 2 + i * pi / 5),
+                   center + radius * (1 if i % 2 == 0 else .5) * sin(-pi / 2 + i * pi / 5))
+                  for i in range(10)]
+        draw.polygon(points, fill=fill, outline=outline, width=width)
+    elif shape == 'hexagon':
+        w, h = right - left, bottom - top
+        points = [(left + w * .25, top + h * .067), (left + w * .75, top + h * .067),
+                  (right, top + h * .5), (left + w * .75, top + h * .933),
+                  (left + w * .25, top + h * .933), (left, top + h * .5)]
+        draw.polygon(points, fill=fill, outline=outline, width=width)
+    else:
+        draw.rectangle(box, fill=fill, outline=outline, width=width)
+
+
+def _shape_canvas(size, background, shape):
     canvas = Image.new('RGB', (size, size), PAPER)
     big = size * SUPERSAMPLE
     mask = Image.new('L', (big, big))
-    ImageDraw.Draw(mask).ellipse((0, 0, big - 1, big - 1), fill=255)
+    _draw_shape(ImageDraw.Draw(mask), big, shape, fill=255)
     mask = mask.resize((size, size), Image.Resampling.LANCZOS)
     canvas.paste(background, (0, 0, size, size), mask)
     return canvas
@@ -35,16 +61,11 @@ def _circle_canvas(size, background):
 
 def _draw_guide(image, size, shape, color):
     outline = max(2, size // 256)
-    draw = ImageDraw.Draw(image)
-    box = (outline // 2, outline // 2, size - 1 - outline // 2, size - 1 - outline // 2)
-    if shape == 'circle':
-        draw.ellipse(box, outline=color, width=outline)
-    else:
-        draw.rectangle(box, outline=color, width=outline)
+    _draw_shape(ImageDraw.Draw(image), size, shape, outline=color, width=outline)
 
 
 def generate(text, color, background, font, font2=None, size=1024,
-             min_contrast=4.5, shape='square', guide=False):
+             min_contrast=4.5, shape='square', guide=False, *, style='regular', underline=False):
     """Render text as a sticker image (RGB, always opaque).
 
     Raises FileNotFoundError for missing font paths, ValueError for invalid
@@ -56,8 +77,13 @@ def generate(text, color, background, font, font2=None, size=1024,
         raise ValueError('text must not be blank.')
     if size < 64:
         raise ValueError('size must be at least 64.')
-    if shape not in ('square', 'circle'):
-        raise ValueError(f"shape must be 'square' or 'circle', got {shape!r}.")
+    if shape not in SHAPES:
+        raise ValueError(f"shape must be one of {SHAPES}, got {shape!r}.")
+    if style not in STYLES:
+        raise ValueError(f'Unknown style: {style!r}')
+    if not isinstance(underline, bool):
+        raise ValueError('underline must be a boolean.')
+    underline = underline or style == 'underline'
     font = Path(font)
     if not font.is_file():
         raise FileNotFoundError(font.resolve())
@@ -78,14 +104,21 @@ def generate(text, color, background, font, font2=None, size=1024,
         if missing:
             raise ValueError(f'{f} lacks these characters: {missing}')
     if shape == 'square':
-        image, _, _ = render(fonts, lines, color, size, background)
+        image, _, _ = render(fonts, lines, color, size, background, style=style, underline=underline)
         if guide:
             _draw_guide(image, size, shape, color)
         return image
-    inner_size = round(size * CIRCLE_INSET)
-    inner, _, _ = render(fonts, lines, color, inner_size, background)
-    canvas = _circle_canvas(size, background)
-    canvas.paste(inner, ((size - inner_size) // 2, (size - inner_size) // 2))
+    if shape == 'circle':
+        inner_size = round(size * CIRCLE_INSET)
+        inner, _, _ = render(fonts, lines, color, inner_size, background, style=style, underline=underline)
+    else:
+        inner, bounds, _ = render(fonts, lines, color, size, background, style=style, underline=underline)
+        inner = inner.crop(bounds)
+        # Safe centered rectangles leave breathing room inside each cut boundary.
+        w, h = {'hexagon': (.60, .60), 'star': (.34, .34)}[shape]
+        inner.thumbnail((round(size * w), round(size * h)), Image.Resampling.LANCZOS)
+    canvas = _shape_canvas(size, background, shape)
+    canvas.paste(inner, ((size - inner.width) // 2, (size - inner.height) // 2))
     if guide:
         _draw_guide(canvas, size, shape, color)
     return canvas
@@ -112,13 +145,16 @@ def main():
     parser.add_argument('--font2', type=Path, default=None)
     parser.add_argument('--size', type=int, default=1024)
     parser.add_argument('--min-contrast', type=float, default=4.5)
-    parser.add_argument('--shape', choices=('square', 'circle'), default='square')
+    parser.add_argument('--shape', choices=SHAPES, default='square')
     parser.add_argument('--guide', action='store_true')
+    parser.add_argument('--style', choices=STYLES, default='regular')
+    parser.add_argument('--underline', action='store_true')
     parser.add_argument('--output', required=True, type=Path)
     args = parser.parse_args()
     try:
         image = generate(args.text, args.color, args.background, args.font, args.font2,
-                          args.size, args.min_contrast, args.shape, args.guide)
+                          args.size, args.min_contrast, args.shape, args.guide,
+                          style=args.style, underline=args.underline)
     except (ValueError, FileNotFoundError) as exc:
         print(f'error: {exc}', file=sys.stderr)
         sys.exit(1)

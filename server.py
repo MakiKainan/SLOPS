@@ -83,7 +83,7 @@ def get_fonts():
     # Refresh on discovery so added files need no server restart.
     CATALOG = font_catalog.scan_fonts(ENGINE_DIR / "fonts")
     res = []
-    canonical = ["regular", "bold", "italic", "bold-italic"]
+    canonical = font_catalog.STYLES
     for fam_name, fam in sorted(CATALOG.items(), key=lambda item: item[0].casefold()):
         raw_styles = font_catalog.available_styles(fam)
         styles = [s for s in canonical if s in raw_styles]
@@ -153,6 +153,8 @@ def render():
         return err(400, "invalid_request", "Field 'shape' must be a string")
     if not isinstance(b["guide"], bool):
         return err(400, "invalid_request", "Field 'guide' must be a boolean")
+    if not isinstance(b.get("underline", False), bool):
+        return err(400, "invalid_request", "Field 'underline' must be a boolean")
     if not isinstance(b["size"], int) or isinstance(b["size"], bool):
         return err(400, "invalid_request", "Field 'size' must be an integer")
 
@@ -182,6 +184,8 @@ def render():
                     size=b["size"],
                     shape=b["shape"],
                     guide=b["guide"],
+                    style=b["style"],
+                    underline=b.get("underline", False),
                 )
             except FileNotFoundError as e:
                 return err(404, "font_file_missing", str(e))
