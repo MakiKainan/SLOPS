@@ -38,5 +38,21 @@ def test_styles():
     print(f'PASS: {len(fonts)} fonts × 5 standalone styles, native variants, export, validation')
 
 
+def test_formatting_combinations():
+    client = server.app.test_client()
+    family = next(f for f in client.get('/fonts').get_json() if 'Sans' in f['family'])
+    images = set()
+    for style in ('regular', 'bold', 'italic', 'bold-italic'):
+        for underline in (False, True):
+            response = client.post('/render', json=dict(
+                text='Sweet Cat', family=family['family'], style=style, underline=underline,
+                foreground='#171717', background='#CBF3DC', shape='square', guide=False, size=1024))
+            assert response.status_code == 200, response.get_json()
+            images.add(response.get_json()['png_base64'])
+    assert len(images) == 8, 'Formatting combinations must produce distinct exports'
+    print('PASS: all eight bold/italic/underline combinations export correctly')
+
+
 if __name__ == '__main__':
     test_styles()
+    test_formatting_combinations()

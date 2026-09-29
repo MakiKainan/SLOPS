@@ -18,6 +18,7 @@ export interface RenderPayload {
   text: string;
   family: string;
   style: Style;
+  underline?: boolean;
   foreground: string;
   background: string;
   shape: Shape;

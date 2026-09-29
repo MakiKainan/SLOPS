@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowRight, Check, Circle, Download, Hexagon, RotateCcw, Square, Star } from "lucide-react";
 import { getJSON, mapError, postRender, b64ToBlobUrl, type FontFamily, type Preset, type RenderPayload, type Shape, type Size, type Style } from "./api";
 import { useRender } from "./useRender";
+import { playOptionKnock } from "./optionSound";
 import FontPicker from "./FontPicker";
 import Preview, { type PreviewError, type Status } from "./Preview";
 import Cat from "./Cat";
@@ -11,12 +12,13 @@ import { PrintSheet, SheetPicker, SIZES, fit, type Slot } from "./Sheet";
 const SAMPLE = "Your Name";
 const CAP = 24;
 const STYLE_LABELS: Record<Style, string> = { regular: "Regular", bold: "Bold", italic: "Italic", "bold-italic": "Bold italic", underline: "Underline" };
-const STYLE_CSS: Record<Style, string> = { regular: "", bold: "font-bold", italic: "italic", "bold-italic": "font-bold italic", underline: "underline underline-offset-4" };
 
 interface Design {
   text: string;
   family: string | null;
-  style: Style;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
   preset: number;
   shape: Shape;
   guide: boolean;
@@ -24,8 +26,6 @@ interface Design {
 }
 
 type SheetSlot = Slot & { design: Design };
-
-const fallbackStyle = (f: FontFamily): Style => (f.styles.includes("regular") ? "regular" : f.styles[0]);
 
 function isNearWhite(hex: string) {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex);
@@ -52,7 +52,7 @@ export default function App() {
   const [fonts, setFonts] = useState<FontFamily[]>([]);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [bootError, setBootError] = useState<string | null>(null);
-  const [d, setD] = useState<Design>({ text: "", family: null, style: "regular", preset: 0, shape: "square", guide: false, size: "m" });
+  const [d, setD] = useState<Design>({ text: "", family: null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "m" });
   const [sheet, setSheet] = useState<(SheetSlot | null)[]>([null, null, null, null]);
   const [active, setActive] = useState(0);
   const [confirming, setConfirming] = useState(false);
@@ -68,7 +68,7 @@ export default function App() {
       .then(([f, p]) => {
         setFonts(f);
         setPresets(p);
-        if (f.length) setD((prev) => (prev.family ? prev : { ...prev, family: f[0].family, style: fallbackStyle(f[0]) }));
+        if (f.length) setD((prev) => (prev.family ? prev : { ...prev, family: f[0].family }));
       })
       .catch((e) => e.name !== "AbortError" && setBootError(e.message));
     return () => ctrl.abort();
@@ -85,8 +85,7 @@ export default function App() {
         setD((prev) => {
           const family = next.find((f) => f.family === prev.family) ?? next[0];
           if (!family) return { ...prev, family: null };
-          const style = family.styles.includes(prev.style) ? prev.style : fallbackStyle(family);
-          return prev.family === family.family && prev.style === style ? prev : { ...prev, family: family.family, style };
+          return prev.family === family.family ? prev : { ...prev, family: family.family };
         });
       } catch {
         // Keep the current picker during temporary connection failures.
@@ -117,25 +116,18 @@ export default function App() {
   const payload = useMemo<RenderPayload | null>(
     () =>
       d.family && preset
-        ? { text: cleanText || SAMPLE, family: d.family, style: d.style, foreground: preset.foreground, background: preset.background, shape: d.shape, guide: d.guide, size: 512 }
+        ? { text: cleanText || SAMPLE, family: d.family, style: d.bold ? (d.italic ? "bold-italic" : "bold") : (d.italic ? "italic" : "regular"), underline: d.underline, foreground: preset.foreground, background: preset.background, shape: d.shape, guide: d.guide, size: 512 }
         : null,
-    [cleanText, d.family, d.style, d.shape, d.guide, preset],
+    [cleanText, d.family, d.bold, d.italic, d.underline, d.shape, d.guide, preset],
   );
   const { result, busy, retry } = useRender(payload);
 
-  const selectFamily = (family: string) => {
-    const f = fonts.find((x) => x.family === family)!;
-    if (!f.styles.includes(d.style)) {
-      const next = fallbackStyle(f);
-      setToast({ msg: `${STYLE_LABELS[d.style]} isn't in ${f.family}, so it's switched to ${STYLE_LABELS[next]}.` });
-      update({ family, style: next });
-    } else update({ family });
-  };
+  const selectFamily = (family: string) => update({ family });
 
   const snapshot = useRef<Design | null>(null);
   const startOver = () => {
     snapshot.current = d;
-    update({ text: "", family: fonts[0]?.family ?? null, style: fonts[0] ? fallbackStyle(fonts[0]) : "regular", preset: 0, shape: "square", guide: false, size: "m" });
+    update({ text: "", family: fonts[0]?.family ?? null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "m" });
     setToast({ msg: "Started over.", undo: () => snapshot.current && update(snapshot.current) });
   };
 
@@ -221,7 +213,7 @@ export default function App() {
           : "Download sticker";
 
   const alt = payload
-    ? `${isSample ? "Sample sticker" : "Sticker"} preview: “${payload.text}” in ${payload.family} ${STYLE_LABELS[payload.style]}, ${preset?.name ?? ""} colors, ${payload.shape}${payload.guide ? ", with cut line" : ""}`
+    ? `${isSample ? "Sample sticker" : "Sticker"} preview: “${payload.text}” in ${payload.family} ${STYLE_LABELS[payload.style]}${payload.underline ? ", underlined" : ""}, ${preset?.name ?? ""} colors, ${payload.shape}${payload.guide ? ", with cut line" : ""}`
     : "";
 
   return (
@@ -233,18 +225,26 @@ export default function App() {
             <span className="sr-only">SLOPS sticker booth</span>
             <Logo />
           </h1>
-          <p className="text-lg font-medium text-ink/80">Make a die-cut sticker in 7 steps, 4 per A4 sheet.</p>
+          <div className="ml-auto flex max-w-full items-center gap-4">
+            <p className="min-w-0 text-lg font-medium text-ink/80">Make a die-cut sticker in 7 steps, 4 per A4 sheet.</p>
+            <div className="w-28 shrink-0 sm:w-40">
+              <Cat />
+            </div>
+          </div>
         </header>
 
-        <main className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-10">
+        <main
+          className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-10"
+          onClick={(event) => {
+            const option = (event.target as Element).closest('input[type="radio"], input[type="checkbox"], button[aria-pressed]');
+            if (option && !option.matches(':disabled, [aria-disabled="true"]')) void playOptionKnock();
+          }}
+        >
           {/* On mobile the aside dissolves (display: contents) so preview and actions can be ordered around the steps. */}
           <aside className="contents lg:sticky lg:top-10 lg:flex lg:flex-col lg:gap-5 lg:self-start">
             <div className="sticky top-0 z-10 order-1 -mx-4 bg-sage px-4 py-3 sm:-mx-6 sm:px-6 lg:static lg:order-none lg:m-0 lg:p-0">
-              <div className="mx-auto grid w-full max-w-[520px] grid-cols-[clamp(64px,18vw,128px)_minmax(0,1fr)] items-center gap-3 sm:gap-4">
-                <Cat />
-                <div className="min-w-0">
-                  <Preview src={result?.ok ? result.blobUrl : undefined} alt={alt} sample={isSample} busy={busy} error={error} status={status} />
-                </div>
+              <div className="mx-auto w-full max-w-[560px]">
+                <Preview src={result?.ok ? result.blobUrl : undefined} alt={alt} sample={isSample} busy={busy} error={error} status={status} />
               </div>
             </div>
 
@@ -300,12 +300,25 @@ export default function App() {
             </Step>
 
             <Step n={3} i={2} title="Style">
-              <Segmented
-                name="style"
-                value={d.style}
-                onChange={(style) => update({ style })}
-                options={(famObj?.styles ?? ["regular"]).map((s) => ({ value: s, label: <span className={STYLE_CSS[s]}>{STYLE_LABELS[s]}</span> }))}
-              />
+              <div role="group" aria-label="Text formatting" className="flex w-full flex-wrap gap-1 rounded-2xl bg-tint p-1">
+                {([
+                  ["bold", "Bold", "font-bold"],
+                  ["italic", "Italic", "italic"],
+                  ["underline", "Underline", "underline underline-offset-4"],
+                ] as const).map(([key, label, textStyle]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-label={label}
+                    title={label}
+                    aria-pressed={d[key]}
+                    onClick={() => update({ [key]: !d[key] })}
+                    className="flex h-10 min-w-24 flex-1 items-center justify-center rounded-xl px-3 font-medium whitespace-nowrap text-ink hover:bg-tint-2 aria-pressed:bg-ink aria-pressed:text-paper aria-pressed:hover:bg-ink-deep"
+                  >
+                    <span className={textStyle}>{label}</span>
+                  </button>
+                ))}
+              </div>
             </Step>
 
             <Step n={4} i={3} title="Color" meta={preset?.name}>
@@ -424,11 +437,11 @@ function Segmented<T extends string>({ name, value, onChange, options }: { name:
   return (
     <div role="radiogroup" className="flex w-full flex-wrap gap-1 rounded-2xl bg-tint p-1">
       {options.map((o) => (
-        <div key={o.value} className={(name === "shape" || name === "style") ? "min-w-24 flex-1" : "flex-1"}>
+        <div key={o.value} className={name === "shape" ? "min-w-24 flex-1" : "flex-1"}>
           <input type="radio" name={name} id={`${name}-${o.value}`} className="peer sr-only" checked={o.value === value} onChange={() => onChange(o.value)} />
           <label
             htmlFor={`${name}-${o.value}`}
-            className="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl font-medium whitespace-nowrap peer-checked:bg-ink peer-checked:text-paper peer-focus-visible:outline-3 peer-focus-visible:outline-offset-3 peer-focus-visible:outline-ink"
+            className="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl font-medium whitespace-nowrap hover:bg-tint-2 peer-checked:bg-ink peer-checked:text-paper peer-checked:hover:bg-ink-deep peer-focus-visible:outline-3 peer-focus-visible:outline-offset-3 peer-focus-visible:outline-ink"
           >
             {o.label}
           </label>
