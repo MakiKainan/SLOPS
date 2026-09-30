@@ -2,13 +2,14 @@
 import argparse
 from io import BytesIO
 import json
+import re
 from math import cos, sin, pi
 from pathlib import Path
 import sys
 import warnings
 
 from fontTools.ttLib import TTFont
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageColor
 
 from typography_core import contrast, layout, render
 from font_catalog import STYLES
@@ -65,7 +66,7 @@ def _draw_guide(image, size, shape, color):
 
 
 def generate(text, color, background, font, font2=None, size=1024,
-             min_contrast=4.5, shape='square', guide=False, *, style='regular', underline=False):
+             min_contrast=4.5, shape='square', guide=False, *, style='regular', underline=False, gradient=None, text2=None):
     """Render text as a sticker image (RGB, always opaque).
 
     Raises FileNotFoundError for missing font paths, ValueError for invalid
@@ -91,37 +92,66 @@ def generate(text, color, background, font, font2=None, size=1024,
         font2 = Path(font2)
         if not font2.is_file():
             raise FileNotFoundError(font2.resolve())
+    if gradient is not None and (not isinstance(gradient, list) or not 2 <= len(gradient) <= 8
+            or any(not isinstance(c, str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', c) for c in gradient)):
+        raise ValueError('gradient must contain 2 to 8 six-digit hex colors.')
     try:
         ratio = contrast(color, background)
+        if gradient:
+            ratio = min(contrast(color, c) for c in gradient)
     except ValueError as exc:
         raise ValueError(f'Invalid color: {exc}') from exc
     if ratio < min_contrast:
         warnings.warn(f'contrast {ratio:.2f}:1 is below recommended {min_contrast}:1', UserWarning)
-    lines = layout(text)
+    if text2 is not None and (not isinstance(text2, str) or not text2.strip()):
+        raise ValueError("text2 must be a nonblank string.")
+    lines = [text.strip(), text2.strip()] if text2 is not None else layout(text)
     fonts = [font, font2] if len(lines) == 2 and font2 else [font] * len(lines)
     for f, line in zip(fonts, lines):
         missing = font_coverage(f, line)
         if missing:
             raise ValueError(f'{f} lacks these characters: {missing}')
+    ink, paper = ('#FFFFFF', '#000000') if gradient else (color, background)
     if shape == 'square':
-        image, _, _ = render(fonts, lines, color, size, background, style=style, underline=underline)
+        image, _, _ = render(fonts, lines, ink, size, paper, style=style, underline=underline)
+        if gradient:
+            mask = image.convert('L')
+            image = _gradient_canvas(size, gradient, shape)
+            image.paste(color, (0, 0, size, size), mask)
         if guide:
             _draw_guide(image, size, shape, color)
         return image
     if shape == 'circle':
         inner_size = round(size * CIRCLE_INSET)
-        inner, _, _ = render(fonts, lines, color, inner_size, background, style=style, underline=underline)
+        inner, _, _ = render(fonts, lines, ink, inner_size, paper, style=style, underline=underline)
     else:
-        inner, bounds, _ = render(fonts, lines, color, size, background, style=style, underline=underline)
+        inner, bounds, _ = render(fonts, lines, ink, size, paper, style=style, underline=underline)
         inner = inner.crop(bounds)
         # Safe centered rectangles leave breathing room inside each cut boundary.
         w, h = {'hexagon': (.60, .60), 'star': (.34, .34)}[shape]
         inner.thumbnail((round(size * w), round(size * h)), Image.Resampling.LANCZOS)
-    canvas = _shape_canvas(size, background, shape)
-    canvas.paste(inner, ((size - inner.width) // 2, (size - inner.height) // 2))
+    canvas = _gradient_canvas(size, gradient, shape) if gradient else _shape_canvas(size, background, shape)
+    x, y = (size - inner.width) // 2, (size - inner.height) // 2
+    if gradient:
+        canvas.paste(color, (x, y, x + inner.width, y + inner.height), inner.convert('L'))
+    else:
+        canvas.paste(inner, (x, y))
     if guide:
         _draw_guide(canvas, size, shape, color)
     return canvas
+
+
+def _gradient_canvas(size, colors, shape):
+    stops = [ImageColor.getrgb(c) for c in colors]
+    ramp = Image.new('RGB', (1, size))
+    pixels = []
+    for y in range(size):
+        position = y / (size - 1) * (len(stops) - 1)
+        index = min(int(position), len(stops) - 2)
+        fraction = position - index
+        pixels.append(tuple(round(a + (b - a) * fraction) for a, b in zip(stops[index], stops[index + 1])))
+    ramp.putdata(pixels)
+    return _shape_canvas(size, ramp.resize((size, size)), shape)
 
 
 def load_color_presets(path='color_presets.json'):

@@ -1,18 +1,165 @@
 [
-  {"name": "Ink on cream", "foreground": "#171717", "background": "#FFF0CF"},
-  {"name": "Snow on teal", "foreground": "#FFFFFF", "background": "#087777"},
-  {"name": "Ink on mint", "foreground": "#171717", "background": "#CBF3DC"},
-  {"name": "Snow on purple", "foreground": "#FFFFFF", "background": "#7030A0"},
-  {"name": "Ink on peach", "foreground": "#171717", "background": "#FFD9BF"},
-  {"name": "Snow on red", "foreground": "#FFFFFF", "background": "#BE2637"},
-  {"name": "Ink on pink", "foreground": "#171717", "background": "#FFC8DD"},
-  {"name": "Ink on lavender", "foreground": "#171717", "background": "#DDD1FF"},
-  {"name": "Ink on sky", "foreground": "#171717", "background": "#BDE0FE"},
-  {"name": "Ink on lemon", "foreground": "#171717", "background": "#FFEA80"},
-  {"name": "Ink on coral", "foreground": "#171717", "background": "#FFA08C"},
-  {"name": "Snow on navy", "foreground": "#FFFFFF", "background": "#243B6B"},
-  {"name": "Cream on forest", "foreground": "#FFF0CF", "background": "#285943"},
-  {"name": "Cream on cocoa", "foreground": "#FFF0CF", "background": "#654236"},
-  {"name": "Pink on plum", "foreground": "#FFC8DD", "background": "#542344"},
-  {"name": "Lemon on charcoal", "foreground": "#FFEA80", "background": "#242424"}
+  {
+    "name": "Ink on cream",
+    "foreground": "#171717",
+    "background": "#FFF0CF"
+  },
+  {
+    "name": "Snow on teal",
+    "foreground": "#FFFFFF",
+    "background": "#087777"
+  },
+  {
+    "name": "Ink on mint",
+    "foreground": "#171717",
+    "background": "#CBF3DC"
+  },
+  {
+    "name": "Snow on purple",
+    "foreground": "#FFFFFF",
+    "background": "#7030A0"
+  },
+  {
+    "name": "Ink on peach",
+    "foreground": "#171717",
+    "background": "#FFD9BF"
+  },
+  {
+    "name": "Snow on red",
+    "foreground": "#FFFFFF",
+    "background": "#BE2637"
+  },
+  {
+    "name": "Ink on pink",
+    "foreground": "#171717",
+    "background": "#FFC8DD"
+  },
+  {
+    "name": "Ink on lavender",
+    "foreground": "#171717",
+    "background": "#DDD1FF"
+  },
+  {
+    "name": "Ink on sky",
+    "foreground": "#171717",
+    "background": "#BDE0FE"
+  },
+  {
+    "name": "Ink on lemon",
+    "foreground": "#171717",
+    "background": "#FFEA80"
+  },
+  {
+    "name": "Ink on coral",
+    "foreground": "#171717",
+    "background": "#FFA08C"
+  },
+  {
+    "name": "Snow on navy",
+    "foreground": "#FFFFFF",
+    "background": "#243B6B"
+  },
+  {
+    "name": "Cream on forest",
+    "foreground": "#FFF0CF",
+    "background": "#285943"
+  },
+  {
+    "name": "Cream on cocoa",
+    "foreground": "#FFF0CF",
+    "background": "#654236"
+  },
+  {
+    "name": "Pink on plum",
+    "foreground": "#FFC8DD",
+    "background": "#542344"
+  },
+  {
+    "name": "Lemon on charcoal",
+    "foreground": "#FFEA80",
+    "background": "#242424"
+  },
+  {
+    "name": "Pastel rainbow",
+    "foreground": "#171717",
+    "background": "#FFADAD",
+    "gradient": [
+      "#FFADAD",
+      "#FFD6A5",
+      "#FDFFB6",
+      "#CAFFBF",
+      "#9BF6FF",
+      "#BDB2FF"
+    ]
+  },
+  {
+    "name": "Ocean blue",
+    "foreground": "#171717",
+    "background": "#A8EDEA",
+    "gradient": [
+      "#A8EDEA",
+      "#7CCBEE",
+      "#8FA9F4"
+    ]
+  },
+  {
+    "name": "Sunset",
+    "foreground": "#171717",
+    "background": "#FFCF87",
+    "gradient": [
+      "#FFCF87",
+      "#FFA8A9",
+      "#D5AAFF"
+    ]
+  },
+  {
+    "name": "Cotton candy",
+    "foreground": "#171717",
+    "background": "#FFB8DF",
+    "gradient": [
+      "#FFB8DF",
+      "#E0C3FC",
+      "#A8D8FF"
+    ]
+  },
+  {
+    "name": "Aurora",
+    "foreground": "#171717",
+    "background": "#A8F0CD",
+    "gradient": [
+      "#A8F0CD",
+      "#A6E4EF",
+      "#C5BAFF"
+    ]
+  },
+  {
+    "name": "Peach sorbet",
+    "foreground": "#171717",
+    "background": "#FFE4AF",
+    "gradient": [
+      "#FFE4AF",
+      "#FFC3A0",
+      "#FFAFBD"
+    ]
+  },
+  {
+    "name": "Lavender sky",
+    "foreground": "#171717",
+    "background": "#E0C3FC",
+    "gradient": [
+      "#E0C3FC",
+      "#B8C6FF",
+      "#A8EDEA"
+    ]
+  },
+  {
+    "name": "Mint lemonade",
+    "foreground": "#171717",
+    "background": "#FFF3A3",
+    "gradient": [
+      "#FFF3A3",
+      "#DCF5A4",
+      "#A8E6CF"
+    ]
+  }
 ]

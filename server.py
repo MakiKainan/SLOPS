@@ -163,12 +163,19 @@ def render():
     if len(b["text"]) > 64:
         return err(400, "invalid_request", "Text length cannot exceed 64 characters")
 
+    if "text2" in b or "family2" in b:
+        if not isinstance(b.get("text2"), str) or not b["text2"].strip() or len(b["text"]) + len(b["text2"]) > 64:
+            return err(400, "invalid_request", "Second line must be nonblank, with at most 64 characters total")
+        if not isinstance(b.get("family2"), str) or b["family2"] not in CATALOG:
+            return err(404, "font_not_found", "Second font was not found")
+
     # 404 font_not_found: family not in CATALOG
     if b["family"] not in CATALOG:
         return err(404, "font_not_found", f"Font family '{b['family']}' not found in catalog")
 
     try:
         path = font_catalog.resolve_font(CATALOG, b["family"], b["style"])
+        path2 = font_catalog.resolve_font(CATALOG, b["family2"], b["style"]) if "family2" in b else None
     except ValueError as e:
         return err(422, "style_unavailable", str(e))
 
@@ -181,11 +188,14 @@ def render():
                     b["foreground"],
                     b["background"],
                     path,
+                    font2=path2,
+                    text2=b.get("text2"),
                     size=b["size"],
                     shape=b["shape"],
                     guide=b["guide"],
                     style=b["style"],
                     underline=b.get("underline", False),
+                    gradient=b.get("gradient"),
                 )
             except FileNotFoundError as e:
                 return err(404, "font_file_missing", str(e))

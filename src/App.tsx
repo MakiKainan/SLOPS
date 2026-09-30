@@ -16,6 +16,9 @@ const STYLE_LABELS: Record<Style, string> = { regular: "Regular", bold: "Bold", 
 interface Design {
   text: string;
   family: string | null;
+  mixFonts: boolean;
+  text2: string;
+  family2: string | null;
   bold: boolean;
   italic: boolean;
   underline: boolean;
@@ -52,7 +55,8 @@ export default function App() {
   const [fonts, setFonts] = useState<FontFamily[]>([]);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [bootError, setBootError] = useState<string | null>(null);
-  const [d, setD] = useState<Design>({ text: "", family: null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "m" });
+  const [d, setD] = useState<Design>({ text: "", mixFonts: false, text2: "", family2: null, family: null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "m" });
+  const [fontPart, setFontPart] = useState<1 | 2>(1);
   const [sheet, setSheet] = useState<(SheetSlot | null)[]>([null, null, null, null]);
   const [active, setActive] = useState(0);
   const [confirming, setConfirming] = useState(false);
@@ -109,25 +113,26 @@ export default function App() {
   };
 
   const cleanText = d.text.replace(/\s+/g, " ").trim();
-  const isSample = !cleanText;
+  const cleanText2 = d.text2.replace(/\s+/g, " ").trim();
+  const isSample = !cleanText || (d.mixFonts && !cleanText2);
   const preset = presets[d.preset];
   const famObj = fonts.find((f) => f.family === d.family);
 
   const payload = useMemo<RenderPayload | null>(
     () =>
       d.family && preset
-        ? { text: cleanText || SAMPLE, family: d.family, style: d.bold ? (d.italic ? "bold-italic" : "bold") : (d.italic ? "italic" : "regular"), underline: d.underline, foreground: preset.foreground, background: preset.background, shape: d.shape, guide: d.guide, size: 512 }
+        ? { text: cleanText || (d.mixFonts ? "Your" : SAMPLE), ...(d.mixFonts ? { text2: cleanText2 || "Name", family2: d.family2 || d.family } : {}), family: d.family, style: d.bold ? (d.italic ? "bold-italic" : "bold") : (d.italic ? "italic" : "regular"), underline: d.underline, foreground: preset.foreground, background: preset.background, gradient: preset.gradient, shape: d.shape, guide: d.guide, size: 512 }
         : null,
-    [cleanText, d.family, d.bold, d.italic, d.underline, d.shape, d.guide, preset],
+    [cleanText, cleanText2, d.mixFonts, d.family2, d.family, d.bold, d.italic, d.underline, d.shape, d.guide, preset],
   );
   const { result, busy, retry } = useRender(payload);
 
-  const selectFamily = (family: string) => update({ family });
+  const selectFamily = (family: string) => update(d.mixFonts && fontPart === 2 ? { family2: family } : { family });
 
   const snapshot = useRef<Design | null>(null);
   const startOver = () => {
     snapshot.current = d;
-    update({ text: "", family: fonts[0]?.family ?? null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "m" });
+    update({ text: "", mixFonts: false, text2: "", family2: null, family: fonts[0]?.family ?? null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "m" });
     setToast({ msg: "Started over.", undo: () => snapshot.current && update(snapshot.current) });
   };
 
@@ -147,7 +152,7 @@ export default function App() {
     const url = await renderFull(p, download);
     setDownloading(false);
     if (!url) return;
-    const filename = `slops-${slug(p.text)}-${p.shape}.png`;
+    const filename = `slops-${slug([p.text, p.text2].filter(Boolean).join(" "))}-${p.shape}.png`;
     const a = document.createElement("a");
     a.href = url;
     a.download = filename;
@@ -169,7 +174,7 @@ export default function App() {
     const empty = [1, 2, 3].map((k) => (at + k) % 4).find((i) => !next[i]);
     if (empty === undefined) return setToast({ msg: "Sheet full. Ready to print!" });
     setActive(empty);
-    update({ text: "" }); // keep font, color, shape and size for the next quarter
+    update({ text: "", text2: "" }); // keep font, color, shape and size for the next quarter
     setToast({ msg: `Quarter ${at + 1} saved. Now designing quarter ${empty + 1}.` });
   };
 
@@ -209,11 +214,11 @@ export default function App() {
       : error
         ? "Fix the problem above"
         : isSample
-          ? "Type your text to download"
+          ? (d.mixFonts ? "Fill both lines to download" : "Type your text to download")
           : "Download sticker";
 
   const alt = payload
-    ? `${isSample ? "Sample sticker" : "Sticker"} preview: “${payload.text}” in ${payload.family} ${STYLE_LABELS[payload.style]}${payload.underline ? ", underlined" : ""}, ${preset?.name ?? ""} colors, ${payload.shape}${payload.guide ? ", with cut line" : ""}`
+    ? `${isSample ? "Sample sticker" : "Sticker"} preview: “${[payload.text, payload.text2].filter(Boolean).join(" / ")}” in ${payload.family}${payload.family2 ? ` and ${payload.family2}` : ""} ${STYLE_LABELS[payload.style]}${payload.underline ? ", underlined" : ""}, ${preset?.name ?? ""} colors, ${payload.shape}${payload.guide ? ", with cut line" : ""}`
     : "";
 
   return (
@@ -242,8 +247,8 @@ export default function App() {
         >
           {/* On mobile the aside dissolves (display: contents) so preview and actions can be ordered around the steps. */}
           <aside className="contents lg:sticky lg:top-10 lg:flex lg:flex-col lg:gap-5 lg:self-start">
-            <div className="sticky top-0 z-10 order-1 -mx-4 bg-sage px-4 py-3 sm:-mx-6 sm:px-6 lg:static lg:order-none lg:m-0 lg:p-0">
-              <div className="mx-auto w-full max-w-[560px]">
+            <div className="order-1 -mx-4 bg-sage px-4 py-3 sm:-mx-6 sm:px-6 lg:static lg:order-none lg:m-0 lg:p-0">
+              <div className="mx-auto w-full max-w-[200px] sm:max-w-[320px] lg:max-w-[560px]">
                 <Preview src={result?.ok ? result.blobUrl : undefined} alt={alt} sample={isSample} busy={busy} error={error} status={status} />
               </div>
             </div>
@@ -276,24 +281,48 @@ export default function App() {
           </aside>
 
           <div className="order-2 flex flex-col gap-6 lg:order-none">
-            <Step n={1} i={0} title={<label htmlFor="text">Your text</label>} meta={`${d.text.length}/${CAP}`}>
+            <Step n={1} i={0} title={<label htmlFor="text">{d.mixFonts ? "First line" : "Your text"}</label>} meta={`${d.text.length + (d.mixFonts && d.text2 ? d.text2.length + 1 : 0)}/${CAP}`}>
               <input
                 id="text"
                 type="text"
-                maxLength={CAP}
+                maxLength={d.mixFonts ? Math.max(0, CAP - d.text2.length - 1) : CAP}
                 autoComplete="off"
                 autoCapitalize="words"
                 spellCheck={false}
-                placeholder="Type a name or word"
+                placeholder={d.mixFonts ? "First line, e.g. Sweet" : "Type a name or word"}
+                aria-label={d.mixFonts ? "First line" : "Your text"}
                 value={d.text}
                 onChange={(e) => update({ text: e.target.value })}
                 className="h-14 w-full rounded-2xl border-2 border-line bg-tint px-5 text-[22px] font-medium placeholder:text-ink-soft/70 focus:border-ink focus:outline-none"
               />
+              <button type="button" aria-pressed={d.mixFonts} onClick={() => {
+                if (d.mixFonts) {
+                  update({ mixFonts: false, text: [d.text, d.text2].filter(Boolean).join(" ") });
+                  setFontPart(1);
+                } else {
+                  const words = d.text.trim().split(/\s+/);
+                  const split = Math.ceil(words.length / 2);
+                  update({ mixFonts: true, text: words.slice(0, split).join(" "), text2: words.slice(split).join(" "), family2: d.family2 || d.family });
+                }
+              }} className="min-h-11 self-start rounded-full bg-tint px-5 font-medium hover:bg-tint-2 aria-pressed:bg-ink aria-pressed:text-paper">
+                {d.mixFonts ? "✓ Mixing two fonts" : "+ Mix two fonts"}
+              </button>
+              {d.mixFonts && <>
+                <label htmlFor="text2" className="font-medium">Second line</label>
+                <input id="text2" value={d.text2} maxLength={Math.max(0, CAP - d.text.length - 1)} onChange={(e) => update({ text2: e.target.value })} placeholder="Second line, e.g. Dreams" className="h-14 w-full rounded-2xl border-2 border-line bg-tint px-5 text-[22px] focus:border-ink focus:outline-none" />
+                <p className="text-sm text-ink-soft">Two lines, two fonts. Choose a line below, then pick its font. Turn this off to join your text again.</p>
+              </>}
             </Step>
 
-            <Step n={2} i={1} title="Font" meta={famObj?.family}>
+            <Step n={2} i={1} title="Font" meta={d.mixFonts && fontPart === 2 ? d.family2 || d.family || undefined : famObj?.family}>
+              {d.mixFonts && <div role="group" aria-label="Choose which line to style" className="flex gap-2">
+                {([1, 2] as const).map((part) => <button key={part} type="button" aria-pressed={fontPart === part} onClick={() => setFontPart(part)} className="min-h-14 min-w-0 flex-1 rounded-2xl bg-tint px-3 py-2 text-left hover:bg-tint-2 aria-pressed:bg-ink aria-pressed:text-paper">
+                  <span className="block text-sm font-semibold">{part === 1 ? "First line" : "Second line"}</span>
+                  <span className="block truncate">{(part === 1 ? d.text : d.text2) || (part === 1 ? "Your" : "Name")}</span>
+                </button>)}
+              </div>}
               {fonts.length ? (
-                <FontPicker fonts={fonts} value={d.family} onChange={selectFamily} specimen={cleanText || SAMPLE} />
+                <FontPicker fonts={fonts} value={d.mixFonts && fontPart === 2 ? d.family2 || d.family : d.family} onChange={selectFamily} specimen={d.mixFonts ? (fontPart === 2 ? cleanText2 || "Name" : cleanText || "Your") : cleanText || SAMPLE} />
               ) : (
                 <div className="h-24 animate-pulse rounded-2xl bg-tint" />
               )}
@@ -330,7 +359,7 @@ export default function App() {
                       htmlFor={`preset-${idx}`}
                       title={p.name}
                       aria-label={p.name}
-                      style={{ background: p.background, color: p.foreground }}
+                      style={{ background: p.gradient ? `linear-gradient(180deg, ${p.gradient.join(", ")})` : p.background, color: p.foreground }}
                       className="relative flex size-14 cursor-pointer items-center justify-center rounded-2xl border-2 border-line text-xl font-semibold peer-checked:ring-3 peer-checked:ring-ink peer-checked:ring-offset-3 peer-focus-visible:outline-3 peer-focus-visible:outline-offset-6 peer-focus-visible:outline-ink [&>svg]:hidden peer-checked:[&>svg]:block"
                     >
                       Aa

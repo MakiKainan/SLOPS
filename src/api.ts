@@ -12,15 +12,19 @@ export interface Preset {
   name: string;
   foreground: string;
   background: string;
+  gradient?: string[];
 }
 
 export interface RenderPayload {
+  text2?: string;
+  family2?: string;
   text: string;
   family: string;
   style: Style;
   underline?: boolean;
   foreground: string;
   background: string;
+  gradient?: string[];
   shape: Shape;
   guide: boolean;
   size: 512 | 1024;
