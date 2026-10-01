@@ -1,0 +1,22 @@
+// Run: npx tsx test_print.ts
+import assert from 'node:assert/strict';
+import { printWhenReady } from './src/printSheet';
+const image = (decode: () => Promise<void>) => ({ decode, naturalWidth: 1024 } as HTMLImageElement);
+let count = 0;
+let ready = false;
+const loaded = image(async () => { ready = true; });
+const print = () => { assert(ready); count++; };
+assert(await printWhenReady([loaded], print));
+assert(await printWhenReady([loaded], print));
+assert.equal(count, 2, 'Repeat printing keeps the sheet available');
+await assert.rejects(printWhenReady([image(async () => { throw Error('Broken image'); })], print));
+assert(await printWhenReady([loaded], print), 'Failed preparation must allow retry');
+await assert.rejects(printWhenReady([loaded], () => { throw Error('Print unavailable'); }));
+assert(await printWhenReady([loaded], print));
+let release!: () => void;
+const waiting = printWhenReady([image(() => new Promise<void>(resolve => { release = resolve; }))], print);
+assert.equal(await printWhenReady([loaded], print), false, 'Prevent simultaneous dialogs');
+release();
+assert(await waiting);
+await assert.rejects(printWhenReady([], print));
+console.log('PASS: decode before print, repeat/cancel/retry, simultaneous-click guard, empty sheet');

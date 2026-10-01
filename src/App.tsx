@@ -55,7 +55,7 @@ export default function App() {
   const [fonts, setFonts] = useState<FontFamily[]>([]);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [bootError, setBootError] = useState<string | null>(null);
-  const [d, setD] = useState<Design>({ text: "", mixFonts: false, text2: "", family2: null, family: null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "m" });
+  const [d, setD] = useState<Design>({ text: "", mixFonts: false, text2: "", family2: null, family: null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "l" });
   const [fontPart, setFontPart] = useState<1 | 2>(1);
   const [sheet, setSheet] = useState<(SheetSlot | null)[]>([null, null, null, null]);
   const [active, setActive] = useState(0);
@@ -132,7 +132,7 @@ export default function App() {
   const snapshot = useRef<Design | null>(null);
   const startOver = () => {
     snapshot.current = d;
-    update({ text: "", mixFonts: false, text2: "", family2: null, family: fonts[0]?.family ?? null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "m" });
+    update({ text: "", mixFonts: false, text2: "", family2: null, family: fonts[0]?.family ?? null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "l" });
     setToast({ msg: "Started over.", undo: () => snapshot.current && update(snapshot.current) });
   };
 
@@ -162,7 +162,7 @@ export default function App() {
   };
 
   const confirm = async () => {
-    if (!payload || !canDownload) return;
+    if (!payload || !canDownload || confirming) return;
     const design = d, at = active, slotAlt = alt; // the user may keep editing while this renders
     setConfirming(true);
     const png = await renderFull({ ...payload, size: 1024 }, confirm);
@@ -170,12 +170,12 @@ export default function App() {
     if (!png) return;
     const next = sheet.map((s, i) => (i === at ? { design, png, alt: slotAlt } : s));
     if (sheet[at]) URL.revokeObjectURL(sheet[at].png);
-    setSheet(next);
+    setSheet(prev => prev.map((s, i) => i === at ? { design, png, alt: slotAlt } : s));
     const empty = [1, 2, 3].map((k) => (at + k) % 4).find((i) => !next[i]);
     if (empty === undefined) return setToast({ msg: "Sheet full. Ready to print!" });
     setActive(empty);
     update({ text: "", text2: "" }); // keep font, color, shape and size for the next quarter
-    setToast({ msg: `Quarter ${at + 1} saved. Now designing quarter ${empty + 1}.` });
+    setToast({ msg: `Section ${at + 1} saved. Now designing section ${empty + 1}.` });
   };
 
   const pickQuarter = (i: number) => {
@@ -206,7 +206,7 @@ export default function App() {
     else status = { tone: "ready", title: "Ready", body: "this is exactly what you'll download, at 1024 px." };
   }
 
-  const canDownload = !!result?.ok && !isSample && !error && !downloading;
+  const canDownload = !!result?.ok && !isSample && !error && !downloading && !busy;
   const dlLabel = downloading
     ? "Making your PNG…"
     : !result
@@ -231,7 +231,7 @@ export default function App() {
             <Logo />
           </h1>
           <div className="ml-auto flex max-w-full items-center gap-4">
-            <p className="min-w-0 text-lg font-medium text-ink/80">Make a die-cut sticker in 7 steps, 4 per A4 sheet.</p>
+            <p className="min-w-0 text-lg font-medium text-ink/80">Create your sticker. Fill a sheet. Preview and print.</p>
             <div className="w-28 shrink-0 sm:w-40">
               <Cat />
             </div>
@@ -400,12 +400,12 @@ export default function App() {
               </Step>
             </div>
 
-            <Step n={7} i={6} title="Size" meta={`${SIZES[d.size].label} · ${SIZES[d.size].mm} mm · ${fit(d.size).cols * fit(d.size).rows} per quarter`}>
+            <Step n={7} i={6} title="Sticker size" meta={`${SIZES[d.size].label} · ${SIZES[d.size].mm} mm · ${fit(d.size).cols * fit(d.size).rows} per section`}>
               <Segmented
                 name="size"
                 value={d.size}
                 onChange={(size) => update({ size })}
-                options={(Object.keys(SIZES) as Size[]).map((s) => ({ value: s, label: <span title={SIZES[s].label}>{s.toUpperCase()}</span> }))}
+                options={(Object.keys(SIZES) as Size[]).map((s) => ({ value: s, label: <span title={`${SIZES[s].label} · ${SIZES[s].mm} mm`}>{s.toUpperCase()}</span> }))}
               />
             </Step>
 
@@ -415,7 +415,7 @@ export default function App() {
               disabled={!canDownload || confirming}
               className="flex h-16 items-center justify-center gap-3 rounded-full bg-ink text-lg font-semibold text-paper hover:bg-ink-deep active:translate-y-0.5 disabled:bg-paper/60 disabled:text-ink-soft disabled:active:translate-y-0"
             >
-              {confirming ? "Saving…" : sheet[active] ? `Update quarter ${active + 1}` : `Confirm quarter ${active + 1}`}
+              {confirming ? "Saving…" : sheet[active] ? `Update section ${active + 1}` : `Add to section ${active + 1}`}
               <ArrowRight className="size-5" aria-hidden />
             </button>
           </div>

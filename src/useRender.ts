@@ -66,8 +66,8 @@ export function useRender(payload: RenderPayload | null) {
   const key = payload ? keyOf(payload) : null;
   useEffect(() => {
     if (!payload) return;
-    const typing = prevText.current !== null && prevText.current !== payload.text;
-    prevText.current = payload.text;
+    const typing = prevText.current !== null && prevText.current !== `${payload.text}\n${payload.text2 ?? ""}`;
+    prevText.current = `${payload.text}\n${payload.text2 ?? ""}`;
     const t = setTimeout(pump, typing ? TEXT_DEBOUNCE_MS : 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
