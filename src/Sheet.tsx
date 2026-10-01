@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { printWhenReady } from "./printSheet";
-import { Check, Printer, X } from "lucide-react";
+import { Check, Eraser, Printer, X } from "lucide-react";
 import type { Size } from "./api";
 
 export const SIZES: Record<Size, { label: string; mm: number }> = {
@@ -47,9 +47,10 @@ interface PickerProps {
   active: number;
   onPick: (i: number) => void;
   onClear: (i: number) => void;
+  onClearAll: () => void;
 }
 
-export function SheetPicker({ slots, active, onPick, onClear }: PickerProps) {
+export function SheetPicker({ slots, active, onPick, onClear, onClearAll }: PickerProps) {
   const filled = slots.filter(Boolean).length;
   const dialog = useRef<HTMLDialogElement>(null);
   const [printing, setPrinting] = useState(false);
@@ -116,6 +117,14 @@ export function SheetPicker({ slots, active, onPick, onClear }: PickerProps) {
           >
             <Printer className="size-5" aria-hidden />
             Preview & print
+          </button>
+          <button
+            type="button"
+            onClick={onClearAll}
+            className="flex h-10 items-center justify-center gap-2 rounded-full bg-tint font-semibold hover:bg-tint-2"
+          >
+            <Eraser className="size-4" aria-hidden />
+            Clear batch
           </button>
           <p className="text-xs font-medium text-ink-soft">Print at 100% / “Actual size”, margins: none.</p>
         </div>

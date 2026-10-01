@@ -30,6 +30,8 @@ interface Design {
 
 type SheetSlot = Slot & { design: Design };
 
+const DEFAULT_DESIGN: Design = { text: "", mixFonts: false, text2: "", family2: null, family: null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "l" };
+
 function isNearWhite(hex: string) {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex);
   if (!m) return false;
@@ -55,7 +57,7 @@ export default function App() {
   const [fonts, setFonts] = useState<FontFamily[]>([]);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [bootError, setBootError] = useState<string | null>(null);
-  const [d, setD] = useState<Design>({ text: "", mixFonts: false, text2: "", family2: null, family: null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "l" });
+  const [d, setD] = useState<Design>(DEFAULT_DESIGN);
   const [fontPart, setFontPart] = useState<1 | 2>(1);
   const [sheet, setSheet] = useState<(SheetSlot | null)[]>([null, null, null, null]);
   const [active, setActive] = useState(0);
@@ -132,8 +134,29 @@ export default function App() {
   const snapshot = useRef<Design | null>(null);
   const startOver = () => {
     snapshot.current = d;
-    update({ text: "", mixFonts: false, text2: "", family2: null, family: fonts[0]?.family ?? null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "l" });
+    update({ ...DEFAULT_DESIGN, family: fonts[0]?.family ?? null });
     setToast({ msg: "Started over.", undo: () => snapshot.current && update(snapshot.current) });
+  };
+
+  /** Blank the whole sheet and reset the sticker settings; undoable until the toast closes. */
+  const clearBatch = () => {
+    const prevSheet = sheet, prevDesign = d, prevActive = active;
+    let undone = false;
+    setSheet([null, null, null, null]);
+    setActive(0);
+    setFontPart(1);
+    update({ ...DEFAULT_DESIGN, family: fonts[0]?.family ?? null });
+    // Keep the old PNGs alive while Undo is offered, then free them.
+    setTimeout(() => { if (!undone) prevSheet.forEach((s) => s && URL.revokeObjectURL(s.png)); }, 6500);
+    setToast({
+      msg: "Batch cleared.",
+      undo: () => {
+        undone = true;
+        setSheet(prevSheet);
+        setActive(prevActive);
+        update(prevDesign);
+      },
+    });
   };
 
   /** 1024 px blob URL, or null after showing the error in the preview. */
@@ -254,7 +277,7 @@ export default function App() {
             </div>
 
             <div className="order-3 lg:order-none">
-              <SheetPicker slots={sheet} active={active} onPick={pickQuarter} onClear={clearQuarter} />
+              <SheetPicker slots={sheet} active={active} onPick={pickQuarter} onClear={clearQuarter} onClearAll={clearBatch} />
             </div>
 
             <div className="sticky bottom-0 z-10 order-3 -mx-4 bg-sage px-4 pt-2 pb-4 sm:-mx-6 sm:px-6 lg:static lg:order-none lg:m-0 lg:p-0">
