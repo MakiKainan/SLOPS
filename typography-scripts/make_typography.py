@@ -9,7 +9,7 @@ import sys
 import warnings
 
 from fontTools.ttLib import TTFont
-from PIL import Image, ImageDraw, ImageColor
+from PIL import Image, ImageDraw, ImageColor, ImageOps
 
 from typography_core import contrast, layout, render
 from font_catalog import STYLES
@@ -136,6 +136,64 @@ def generate(text, color, background, font, font2=None, size=1024,
         canvas.paste(color, (x, y, x + inner.width, y + inner.height), inner.convert('L'))
     else:
         canvas.paste(inner, (x, y))
+    if guide:
+        _draw_guide(canvas, size, shape, color)
+    return canvas
+
+
+# Caption box per shape: (max width, max height, vertical center), as fractions of the canvas.
+CAPTION_BOX = {'square': (.84, .16, .84), 'circle': (.62, .14, .78),
+               'hexagon': (.62, .13, .80), 'star': (.30, .10, .66)}
+
+
+def generate_photo(photo, color, background, size=1024, shape='square', guide=False, *,
+                   text='', font=None, font2=None, text2=None, style='regular', underline=False,
+                   min_contrast=4.5):
+    """Die-cut a photo into shape, with an optional caption on a pill in the preset colors.
+
+    photo is a PIL image. The caption follows generate()'s rules for fonts,
+    styles and glyph coverage; without text no font is needed.
+    """
+    if size < 64:
+        raise ValueError('size must be at least 64.')
+    if shape not in SHAPES:
+        raise ValueError(f"shape must be one of {SHAPES}, got {shape!r}.")
+    if style not in STYLES:
+        raise ValueError(f'Unknown style: {style!r}')
+    try:
+        ratio = contrast(color, background)
+    except ValueError as exc:
+        raise ValueError(f'Invalid color: {exc}') from exc
+    canvas = _shape_canvas(size, ImageOps.fit(photo.convert('RGB'), (size, size), Image.Resampling.LANCZOS), shape)
+    if text.strip() or (text2 or '').strip():
+        if ratio < min_contrast:
+            warnings.warn(f'contrast {ratio:.2f}:1 is below recommended {min_contrast}:1', UserWarning)
+        font = Path(font)
+        if not font.is_file():
+            raise FileNotFoundError(font.resolve())
+        if font2 is not None:
+            font2 = Path(font2)
+            if not font2.is_file():
+                raise FileNotFoundError(font2.resolve())
+        if text2 is not None and text2.strip() and text.strip():
+            lines = [text.strip(), text2.strip()]
+        else:
+            lines = layout(text.strip() or text2.strip())
+        fonts = [font, font2] if len(lines) == 2 and font2 else [font] * len(lines)
+        for f, line in zip(fonts, lines):
+            missing = font_coverage(f, line)
+            if missing:
+                raise ValueError(f'{f} lacks these characters: {missing}')
+        caption, bounds, _ = render(fonts, lines, color, size, background, style=style,
+                                    underline=underline or style == 'underline')
+        caption = caption.crop(bounds)
+        bw, bh, cy = CAPTION_BOX[shape]
+        pad = max(4, round(size * .025))
+        caption.thumbnail((round(size * bw) - 2 * pad, round(size * bh) - 2 * pad), Image.Resampling.LANCZOS)
+        w, h = caption.width + 2 * pad, caption.height + 2 * pad
+        x, y = (size - w) // 2, round(size * cy - h / 2)
+        ImageDraw.Draw(canvas).rounded_rectangle((x, y, x + w - 1, y + h - 1), radius=min(h // 2, pad * 2), fill=background)
+        canvas.paste(caption, (x + pad, y + pad))
     if guide:
         _draw_guide(canvas, size, shape, color)
     return canvas

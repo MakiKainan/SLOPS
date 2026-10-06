@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FontFamily, Style } from "./api";
+import FilterChips from "./FilterChips";
 
 const STYLES: Style[] = ["regular", "bold", "italic", "bold-italic", "underline"];
 const OTHER = "Other";
 
 const catOf = (f: FontFamily) => f.category ?? OTHER;
-const label = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Load each family's specimen face once; returns family -> CSS font-family name. */
 function useSpecimenFaces(fonts: FontFamily[]) {
@@ -58,21 +58,7 @@ export default function FontPicker({ fonts, value, onChange, specimen }: Props) 
 
   return (
     <div className="flex flex-col gap-5">
-      {filters.length > 0 && (
-        <div role="group" aria-label="Filter fonts by category" className="flex flex-wrap gap-2">
-          {filters.map((c) => (
-            <button
-              key={c}
-              type="button"
-              aria-pressed={filter === c}
-              onClick={() => setFilter(c)}
-              className="h-9 rounded-full bg-tint px-4 text-sm font-medium hover:bg-tint-2 aria-pressed:bg-ink aria-pressed:text-paper"
-            >
-              {label(c)}
-            </button>
-          ))}
-        </div>
-      )}
+      {filters.length > 0 && <FilterChips options={filters} value={filter} onChange={setFilter} label="Filter fonts by category" />}
 
       <div role="radiogroup" aria-label="Font" className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
         {visible.map((f) => {

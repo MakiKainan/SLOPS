@@ -28,6 +28,8 @@ export interface RenderPayload {
   shape: Shape;
   guide: boolean;
   size: 512 | 1024;
+  /** Id of an uploaded photo; the text becomes an optional caption. */
+  photo?: string;
 }
 
 export type RenderResult =
@@ -68,6 +70,18 @@ export function b64ToBlobUrl(b64: string): string {
   return URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
 }
 
+export type PhotoSession = { status: "waiting"; expires_in: number } | { status: "ready"; photo: string } | { status: "expired" };
+
+export const createPhotoSession = async () => {
+  const res = await fetch("/photo-session", { method: "POST" });
+  if (!res.ok) throw new Error(`/photo-session → HTTP ${res.status}`);
+  return (await res.json()) as { token: string; expires_in: number };
+};
+export const getPhotoSession = (token: string, signal?: AbortSignal) => getJSON<PhotoSession>(`/photo-session/${token}`, signal);
+export const getPublicUrl = (signal?: AbortSignal) => getJSON<{ url: string | null }>("/public-url", signal).then((r) => r.url);
+export const photoThumbUrl = (id: string) => `/photo/${id}?w=160`;
+export const deletePhoto = (id: string) => void fetch(`/photo/${id}`, { method: "DELETE" }).catch(() => {});
+
 export interface ErrorInfo {
   headline: string;
   fix: string;
@@ -93,6 +107,9 @@ export function mapError(code: string, detail = ""): ErrorInfo {
   }
   if (code === "font_not_found" || code === "font_file_missing") {
     return { headline: "Font file missing", fix: "Pick another font and tell the booth staff.", retry: false };
+  }
+  if (code === "photo_not_found") {
+    return { headline: "This photo is gone", fix: "Remove it and upload it again with a new QR code.", retry: false };
   }
   if (code === "invalid_request") {
     return { headline: "The app sent a bad request", fix: "Reload the page (Ctrl+R / ⌘R).", retry: false };

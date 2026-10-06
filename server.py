@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import base64
 import os
+import secrets
 import sys
 import threading
+import time
 import traceback
 import warnings
+from collections import OrderedDict
+from io import BytesIO
 from pathlib import Path
 
 # os.chdir() to the folder containing server.py
@@ -19,6 +23,7 @@ sys.path.insert(0, str(ENGINE_DIR))
 import font_catalog
 import make_typography
 from flask import Flask, jsonify, request, send_file
+from PIL import Image, ImageOps, UnidentifiedImageError
 from werkzeug.exceptions import HTTPException
 
 # Load catalog and presets once at startup with defaults
@@ -36,6 +41,53 @@ app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
 
 RENDER_LOCK = threading.Lock()
+
+# Customer photos live in memory only, so nothing is left on disk after the event.
+UPLOAD_MAX_BYTES = 15 * 1024 * 1024
+PHOTO_MAX_SIDE = 2048
+SESSION_TTL = 10 * 60
+PHOTO_TTL = 3 * 60 * 60
+PHOTO_CAP = 60
+STORE_LOCK = threading.Lock()
+SESSIONS: dict[str, dict] = {}  # token -> {"expires": float, "photo": str | None}
+PHOTOS: "OrderedDict[str, tuple[float, Image.Image]]" = OrderedDict()  # id -> (expires, image), LRU order
+
+
+def _sweep(now: float):
+    for token in [t for t, s in SESSIONS.items() if s["expires"] < now and not s["photo"]]:
+        del SESSIONS[token]
+    for token in [t for t, s in SESSIONS.items() if s["expires"] + PHOTO_TTL < now]:
+        del SESSIONS[token]
+    for pid in [p for p, (exp, _) in PHOTOS.items() if exp < now]:
+        del PHOTOS[pid]
+
+
+def get_photo(photo_id: str):
+    with STORE_LOCK:
+        _sweep(time.time())
+        entry = PHOTOS.get(photo_id)
+        if entry is None:
+            return None
+        PHOTOS.move_to_end(photo_id)
+        return entry[1]
+
+
+def normalize_photo(data: bytes) -> Image.Image:
+    """Decode an uploaded image, upright it, flatten transparency onto white and cap its size."""
+    with Image.open(BytesIO(data)) as probe:
+        if probe.width * probe.height > 50_000_000:
+            raise ValueError("Photo has too many pixels.")
+        probe.verify()
+    img = Image.open(BytesIO(data))
+    img = ImageOps.exif_transpose(img)
+    if img.mode in ("RGBA", "LA", "P"):
+        img = img.convert("RGBA")
+        flat = Image.new("RGB", img.size, "#FFFFFF")
+        flat.paste(img, mask=img.getchannel("A"))
+        img = flat
+    img = img.convert("RGB")
+    img.thumbnail((PHOTO_MAX_SIDE, PHOTO_MAX_SIDE), Image.Resampling.LANCZOS)
+    return img
 
 
 def err(status: int, code: str, message: str):
@@ -127,6 +179,75 @@ def get_presets():
     return jsonify(COLOR_PRESETS)
 
 
+@app.post("/photo-session")
+def create_photo_session():
+    token = secrets.token_urlsafe(16)
+    with STORE_LOCK:
+        _sweep(time.time())
+        SESSIONS[token] = {"expires": time.time() + SESSION_TTL, "photo": None}
+    return jsonify({"token": token, "expires_in": SESSION_TTL})
+
+
+@app.get("/photo-session/<token>")
+def photo_session_status(token):
+    with STORE_LOCK:
+        _sweep(time.time())
+        s = SESSIONS.get(token)
+        if s is None:
+            return jsonify({"status": "expired"})
+        if s["photo"]:
+            return jsonify({"status": "ready", "photo": s["photo"]})
+        return jsonify({"status": "waiting", "expires_in": max(0, round(s["expires"] - time.time()))})
+
+
+@app.post("/upload/<token>")
+def upload_photo(token):
+    request.max_content_length = UPLOAD_MAX_BYTES
+    with STORE_LOCK:
+        _sweep(time.time())
+        s = SESSIONS.get(token)
+        if s is None or s["photo"]:
+            return err(410, "session_expired", "This upload link has expired or was already used.")
+    file = request.files.get("photo")
+    if file is None:
+        return err(400, "invalid_request", "Missing file field 'photo'")
+    try:
+        img = normalize_photo(file.read())
+    except (UnidentifiedImageError, ValueError, OSError, Image.DecompressionBombError) as e:
+        return err(422, "bad_image", f"That file isn't a photo we can use: {e}")
+    with STORE_LOCK:
+        s = SESSIONS.get(token)
+        if s is None or s["photo"]:  # another upload won the race
+            return err(410, "session_expired", "This upload link has expired or was already used.")
+        photo_id = secrets.token_urlsafe(12)
+        PHOTOS[photo_id] = (time.time() + PHOTO_TTL, img)
+        while len(PHOTOS) > PHOTO_CAP:
+            PHOTOS.popitem(last=False)
+        s["photo"] = photo_id
+    return jsonify({"ok": True})
+
+
+@app.get("/photo/<photo_id>")
+def photo_thumb(photo_id):
+    img = get_photo(photo_id)
+    if img is None:
+        return err(404, "photo_not_found", "Photo not found or expired")
+    w = request.args.get("w", 160, type=int)
+    thumb = img.copy()
+    thumb.thumbnail((max(16, min(w, 512)),) * 2)
+    buf = BytesIO()
+    thumb.save(buf, format="JPEG", quality=85)
+    buf.seek(0)
+    return send_file(buf, mimetype="image/jpeg", max_age=3600)
+
+
+@app.delete("/photo/<photo_id>")
+def delete_photo(photo_id):
+    with STORE_LOCK:
+        PHOTOS.pop(photo_id, None)
+    return "", 204
+
+
 @app.post("/render")
 def render():
     b = request.get_json(silent=True)
@@ -173,6 +294,14 @@ def render():
     if b["family"] not in CATALOG:
         return err(404, "font_not_found", f"Font family '{b['family']}' not found in catalog")
 
+    photo = None
+    if "photo" in b:
+        if not isinstance(b["photo"], str):
+            return err(400, "invalid_request", "Field 'photo' must be a string")
+        photo = get_photo(b["photo"])
+        if photo is None:
+            return err(404, "photo_not_found", "Photo not found or expired")
+
     try:
         path = font_catalog.resolve_font(CATALOG, b["family"], b["style"])
         path2 = font_catalog.resolve_font(CATALOG, b["family2"], b["style"]) if "family2" in b else None
@@ -183,20 +312,36 @@ def render():
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             try:
-                img = make_typography.generate(
-                    b["text"],
-                    b["foreground"],
-                    b["background"],
-                    path,
-                    font2=path2,
-                    text2=b.get("text2"),
-                    size=b["size"],
-                    shape=b["shape"],
-                    guide=b["guide"],
-                    style=b["style"],
-                    underline=b.get("underline", False),
-                    gradient=b.get("gradient"),
-                )
+                if photo is not None:
+                    img = make_typography.generate_photo(
+                        photo,
+                        b["foreground"],
+                        b["background"],
+                        size=b["size"],
+                        shape=b["shape"],
+                        guide=b["guide"],
+                        text=b["text"],
+                        font=path,
+                        font2=path2,
+                        text2=b.get("text2"),
+                        style=b["style"],
+                        underline=b.get("underline", False),
+                    )
+                else:
+                    img = make_typography.generate(
+                        b["text"],
+                        b["foreground"],
+                        b["background"],
+                        path,
+                        font2=path2,
+                        text2=b.get("text2"),
+                        size=b["size"],
+                        shape=b["shape"],
+                        guide=b["guide"],
+                        style=b["style"],
+                        underline=b.get("underline", False),
+                        gradient=b.get("gradient"),
+                    )
             except FileNotFoundError as e:
                 return err(404, "font_file_missing", str(e))
             except ValueError as e:

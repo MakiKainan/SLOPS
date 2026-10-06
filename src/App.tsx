@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowRight, Check, Circle, Download, Hexagon, RotateCcw, Square, Star } from "lucide-react";
-import { getJSON, mapError, postRender, b64ToBlobUrl, type FontFamily, type Preset, type RenderPayload, type Shape, type Size, type Style } from "./api";
+import { ArrowRight, Circle, Download, Hexagon, ImagePlus, RotateCcw, Square, Star, X } from "lucide-react";
+import { getJSON, mapError, postRender, b64ToBlobUrl, deletePhoto, photoThumbUrl, type FontFamily, type Preset, type RenderPayload, type Shape, type Size, type Style } from "./api";
 import { useRender } from "./useRender";
 import { playOptionKnock } from "./optionSound";
 import FontPicker from "./FontPicker";
+import ColorPicker from "./ColorPicker";
+import PhotoDialog from "./PhotoDialog";
 import Preview, { type PreviewError, type Status } from "./Preview";
 import Cat from "./Cat";
 import Background from "./Background";
@@ -26,11 +28,14 @@ interface Design {
   shape: Shape;
   guide: boolean;
   size: Size;
+  /** Uploaded photo id; when set, the text is an optional caption. */
+  photo: string | null;
 }
 
 type SheetSlot = Slot & { design: Design };
 
-const DEFAULT_DESIGN: Design = { text: "", mixFonts: false, text2: "", family2: null, family: null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "l" };
+const DEFAULT_DESIGN: Design = { text: "", mixFonts: false, text2: "", family2: null, family: null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "l", photo: null };
+const UNDO_MS = 6500;
 
 function isNearWhite(hex: string) {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex);
@@ -65,6 +70,18 @@ export default function App() {
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<PreviewError | null>(null);
   const [toast, setToast] = useState<{ msg: string; undo?: () => void } | null>(null);
+  const [photoOpen, setPhotoOpen] = useState(false);
+
+  // Photos live on the booth server in memory; free one once neither the design nor the sheet uses it
+  // (checked after the undo window, so Undo can still bring it back).
+  const live = useRef({ d, sheet });
+  live.current = { d, sheet };
+  const releasePhotos = (ids: (string | null | undefined)[]) =>
+    setTimeout(() => {
+      const { d: cur, sheet: slots } = live.current;
+      const used = new Set([cur.photo, ...slots.map((s) => s?.design.photo)]);
+      new Set(ids).forEach((id) => id && !used.has(id) && deletePhoto(id));
+    }, UNDO_MS);
 
   const [bootTry, setBootTry] = useState(0);
   useEffect(() => {
@@ -116,17 +133,17 @@ export default function App() {
 
   const cleanText = d.text.replace(/\s+/g, " ").trim();
   const cleanText2 = d.text2.replace(/\s+/g, " ").trim();
-  const isSample = !cleanText || (d.mixFonts && !cleanText2);
+  // A photo sticker is real even without text: the caption is optional.
+  const isSample = !d.photo && (!cleanText || (d.mixFonts && !cleanText2));
   const preset = presets[d.preset];
   const famObj = fonts.find((f) => f.family === d.family);
 
-  const payload = useMemo<RenderPayload | null>(
-    () =>
-      d.family && preset
-        ? { text: cleanText || (d.mixFonts ? "Your" : SAMPLE), ...(d.mixFonts ? { text2: cleanText2 || "Name", family2: d.family2 || d.family } : {}), family: d.family, style: d.bold ? (d.italic ? "bold-italic" : "bold") : (d.italic ? "italic" : "regular"), underline: d.underline, foreground: preset.foreground, background: preset.background, gradient: preset.gradient, shape: d.shape, guide: d.guide, size: 512 }
-        : null,
-    [cleanText, cleanText2, d.mixFonts, d.family2, d.family, d.bold, d.italic, d.underline, d.shape, d.guide, preset],
-  );
+  const payload = useMemo<RenderPayload | null>(() => {
+    if (!d.family || !preset) return null;
+    const look = { family: d.family, style: (d.bold ? (d.italic ? "bold-italic" : "bold") : (d.italic ? "italic" : "regular")) as Style, underline: d.underline, foreground: preset.foreground, background: preset.background, shape: d.shape, guide: d.guide, size: 512 as const };
+    if (d.photo) return { ...look, photo: d.photo, text: cleanText, ...(d.mixFonts && cleanText2 ? { text2: cleanText2, family2: d.family2 || d.family } : {}) };
+    return { ...look, text: cleanText || (d.mixFonts ? "Your" : SAMPLE), ...(d.mixFonts ? { text2: cleanText2 || "Name", family2: d.family2 || d.family } : {}), gradient: preset.gradient };
+  }, [cleanText, cleanText2, d.mixFonts, d.family2, d.family, d.bold, d.italic, d.underline, d.shape, d.guide, d.photo, preset]);
   const { result, busy, retry } = useRender(payload);
 
   const selectFamily = (family: string) => update(d.mixFonts && fontPart === 2 ? { family2: family } : { family });
@@ -135,6 +152,7 @@ export default function App() {
   const startOver = () => {
     snapshot.current = d;
     update({ ...DEFAULT_DESIGN, family: fonts[0]?.family ?? null });
+    releasePhotos([d.photo]);
     setToast({ msg: "Started over.", undo: () => snapshot.current && update(snapshot.current) });
   };
 
@@ -147,7 +165,8 @@ export default function App() {
     setFontPart(1);
     update({ ...DEFAULT_DESIGN, family: fonts[0]?.family ?? null });
     // Keep the old PNGs alive while Undo is offered, then free them.
-    setTimeout(() => { if (!undone) prevSheet.forEach((s) => s && URL.revokeObjectURL(s.png)); }, 6500);
+    setTimeout(() => { if (!undone) prevSheet.forEach((s) => s && URL.revokeObjectURL(s.png)); }, UNDO_MS);
+    releasePhotos([prevDesign.photo, ...prevSheet.map((s) => s?.design.photo)]);
     setToast({
       msg: "Batch cleared.",
       undo: () => {
@@ -175,7 +194,7 @@ export default function App() {
     const url = await renderFull(p, download);
     setDownloading(false);
     if (!url) return;
-    const filename = `slops-${slug([p.text, p.text2].filter(Boolean).join(" "))}-${p.shape}.png`;
+    const filename = `slops-${slug([p.text, p.text2].filter(Boolean).join(" ") || (p.photo ? "photo" : ""))}-${p.shape}.png`;
     const a = document.createElement("a");
     a.href = url;
     a.download = filename;
@@ -209,7 +228,13 @@ export default function App() {
 
   const clearQuarter = (i: number) => {
     URL.revokeObjectURL(sheet[i]!.png);
+    releasePhotos([sheet[i]!.design.photo]);
     setSheet((prev) => prev.map((s, k) => (k === i ? null : s)));
+  };
+
+  const setPhoto = (photo: string | null) => {
+    releasePhotos([d.photo]);
+    update({ photo });
   };
 
   // Preview error / status / download-button copy
@@ -221,10 +246,10 @@ export default function App() {
     const info = mapError(result.code, result.message);
     error = { headline: info.headline, detail: result.message, fix: info.fix, onRetry: info.retry ? retry : undefined };
   } else if (!error && result?.ok) {
-    if (isSample) status = { tone: "sample", body: "Type your text in step 1. This is just a sample." };
+    if (isSample) status = { tone: "sample", body: "Type your text or add a photo in step 1. This is just a sample." };
     else if (result.warning)
       status = { tone: "warn", title: /contrast/i.test(result.warning) ? "Low contrast" : "Heads up", body: `still OK to download. ${result.warning}` };
-    else if (preset && isNearWhite(preset.background) && !d.guide)
+    else if (preset && !d.photo && isNearWhite(preset.background) && !d.guide)
       status = { tone: "hint", title: "Light background", body: "turn on Cut line so the edge shows when cutting." };
     else status = { tone: "ready", title: "Ready", body: "this is exactly what you'll download, at 1024 px." };
   }
@@ -237,11 +262,11 @@ export default function App() {
       : error
         ? "Fix the problem above"
         : isSample
-          ? (d.mixFonts ? "Fill both lines to download" : "Type your text to download")
+          ? (d.mixFonts ? "Fill both lines to download" : "Type your text or add a photo")
           : "Download sticker";
 
   const alt = payload
-    ? `${isSample ? "Sample sticker" : "Sticker"} preview: “${[payload.text, payload.text2].filter(Boolean).join(" / ")}” in ${payload.family}${payload.family2 ? ` and ${payload.family2}` : ""} ${STYLE_LABELS[payload.style]}${payload.underline ? ", underlined" : ""}, ${preset?.name ?? ""} colors, ${payload.shape}${payload.guide ? ", with cut line" : ""}`
+    ? `${isSample ? "Sample sticker" : payload.photo ? "Photo sticker" : "Sticker"} preview: “${[payload.text, payload.text2].filter(Boolean).join(" / ") || "no caption"}” in ${payload.family}${payload.family2 ? ` and ${payload.family2}` : ""} ${STYLE_LABELS[payload.style]}${payload.underline ? ", underlined" : ""}, ${preset?.name ?? ""} colors, ${payload.shape}${payload.guide ? ", with cut line" : ""}`
     : "";
 
   return (
@@ -304,7 +329,22 @@ export default function App() {
           </aside>
 
           <div className="order-2 flex flex-col gap-6 lg:order-none">
-            <Step n={1} i={0} title={<label htmlFor="text">{d.mixFonts ? "First line" : "Your text"}</label>} meta={`${d.text.length + (d.mixFonts && d.text2 ? d.text2.length + 1 : 0)}/${CAP}`}>
+            <Step n={1} i={0} title={<label htmlFor="text">{d.mixFonts ? "First line" : d.photo ? "Photo & caption" : "Your text"}</label>} meta={`${d.text.length + (d.mixFonts && d.text2 ? d.text2.length + 1 : 0)}/${CAP}`}>
+              {d.photo ? (
+                <div className="flex items-center gap-4 rounded-2xl bg-tint p-3">
+                  <img src={photoThumbUrl(d.photo)} alt="Your uploaded photo" className="size-16 shrink-0 rounded-xl object-cover" />
+                  <span className="min-w-0 flex-1 font-medium">Photo added. A caption is optional.</span>
+                  <button type="button" onClick={() => setPhotoOpen(true)} className="min-h-11 rounded-full bg-paper px-4 font-medium hover:bg-tint-2">New photo</button>
+                  <button type="button" aria-label="Remove photo" title="Remove photo" onClick={() => setPhoto(null)} className="grid size-11 shrink-0 place-items-center rounded-full bg-paper hover:bg-tint-2">
+                    <X className="size-4" aria-hidden />
+                  </button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setPhotoOpen(true)} className="flex min-h-11 items-center gap-2 self-start rounded-full bg-tint px-5 font-medium hover:bg-tint-2">
+                  <ImagePlus className="size-4" aria-hidden />
+                  Add a photo from your phone
+                </button>
+              )}
               <input
                 id="text"
                 type="text"
@@ -312,8 +352,8 @@ export default function App() {
                 autoComplete="off"
                 autoCapitalize="words"
                 spellCheck={false}
-                placeholder={d.mixFonts ? "First line, e.g. Sweet" : "Type a name or word"}
-                aria-label={d.mixFonts ? "First line" : "Your text"}
+                placeholder={d.mixFonts ? "First line, e.g. Sweet" : d.photo ? "Optional caption" : "Type a name or word"}
+                aria-label={d.mixFonts ? "First line" : d.photo ? "Caption" : "Your text"}
                 value={d.text}
                 onChange={(e) => update({ text: e.target.value })}
                 className="h-14 w-full rounded-2xl border-2 border-line bg-tint px-5 text-[22px] font-medium placeholder:text-ink-soft/70 focus:border-ink focus:outline-none"
@@ -374,23 +414,8 @@ export default function App() {
             </Step>
 
             <Step n={4} i={3} title="Color" meta={preset?.name}>
-              <div role="radiogroup" aria-label="Color preset" className="flex flex-wrap gap-3 p-1">
-                {presets.map((p, idx) => (
-                  <div key={p.name}>
-                    <input type="radio" name="preset" id={`preset-${idx}`} className="peer sr-only" checked={idx === d.preset} onChange={() => update({ preset: idx })} />
-                    <label
-                      htmlFor={`preset-${idx}`}
-                      title={p.name}
-                      aria-label={p.name}
-                      style={{ background: p.gradient ? `linear-gradient(180deg, ${p.gradient.join(", ")})` : p.background, color: p.foreground }}
-                      className="relative flex size-14 cursor-pointer items-center justify-center rounded-2xl border-2 border-line text-xl font-semibold peer-checked:ring-3 peer-checked:ring-ink peer-checked:ring-offset-3 peer-focus-visible:outline-3 peer-focus-visible:outline-offset-6 peer-focus-visible:outline-ink [&>svg]:hidden peer-checked:[&>svg]:block"
-                    >
-                      Aa
-                      <Check className="absolute -top-2 -right-2 size-5 rounded-full bg-ink p-0.5 text-paper" strokeWidth={3} aria-hidden />
-                    </label>
-                  </div>
-                ))}
-              </div>
+              {d.photo && <p className="-mt-2 text-sm text-ink-soft">With a photo, colors style the caption and cut line.</p>}
+              <ColorPicker presets={presets} value={d.preset} onChange={(preset) => update({ preset })} />
             </Step>
 
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -446,6 +471,17 @@ export default function App() {
       </div>
 
       <PrintSheet slots={sheet} />
+
+      {photoOpen && (
+        <PhotoDialog
+          onClose={() => setPhotoOpen(false)}
+          onPhoto={(photo) => {
+            setPhotoOpen(false);
+            setPhoto(photo);
+            setToast({ msg: "Photo received!" });
+          }}
+        />
+      )}
 
       {toast && (
         <div role="status" aria-live="polite" className="fixed bottom-24 left-1/2 z-50 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-3 rounded-full bg-ink px-5 py-3 font-medium text-paper shadow-lg lg:bottom-6">

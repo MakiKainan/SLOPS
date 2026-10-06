@@ -22,6 +22,8 @@ Powered by a dual-runtime architecture: a fast **React + Vite** frontend orchest
 - **📐 Smart Line Breaking**: Multi-word phrases automatically balance across lines for optimal visual weight and aesthetics.
 - **🗂️ Dynamic Font Catalog**: Automatically scans and catalogs custom `.ttf` and `.otf` fonts by family and styles (`regular`, `bold`, `italic`, `bold-italic`).
 - **📥 High-Resolution Export**: One-click download of 1024×1024 crisp die-cut transparent PNGs with sanitized, descriptive filenames.
+- **📱 Phone Photo Upload**: Customers scan a one-time QR code, pick a photo on their phone, and it lands in the editor as a die-cut photo sticker with an optional caption. Photos are kept in memory only.
+- **🎨 Color Filters**: Narrow the color swatches to solid (Base) or Gradient presets.
 - **🧩 Automated Process Management**: The Node server automatically launches, monitors, and proxies requests to the Python Flask microservice.
 
 ---
@@ -148,7 +150,13 @@ The Express server forwards the following endpoints to the internal Python Flask
 | `/fonts` | `GET` | Returns list of available font families, categories, and supported styles. |
 | `/font-file` | `GET` | Fetches raw font binary (`.ttf`/`.otf`) by `?family=` and `?style=`. |
 | `/presets` | `GET` | Returns curated color pairs (`name`, `foreground`, `background`). |
-| `/render` | `POST` | Renders sticker image. Returns `{ png_base64, warning }`. |
+| `/render` | `POST` | Renders sticker image. Returns `{ png_base64, warning }`. Pass `photo` (an uploaded photo id) to make a photo sticker; `text` then becomes an optional caption. |
+| `/photo-session` | `POST` | Starts a one-time upload session. Returns `{ token, expires_in }` (10 minutes). |
+| `/photo-session/<token>` | `GET` | `{ status: "waiting" \| "ready" \| "expired", photo? }`; the booth polls this. |
+| `/photo/<id>` | `GET` / `DELETE` | JPEG thumbnail (`?w=160`) / forget the photo. |
+| `/public-url` | `GET` | Public base URL of the upload page, or `null` when the tunnel is off (served by Express). |
+
+The phone upload page lives on a **separate listener, `127.0.0.1:3001`**, which serves only `GET/POST /u/<token>`; everything else there is 404. Only this port is published to the internet.
 
 ### Example Render Request Payload
 
@@ -164,6 +172,23 @@ The Express server forwards the following endpoints to the internal Python Flask
   "size": 1024
 }
 ```
+
+---
+
+## 📱 Phone Photo Uploads
+
+Customers upload over their own mobile data, so they never join booth Wi-Fi. The booth needs internet (tethering to a phone is fine).
+
+1. Install Cloudflare's tunnel client once:
+   ```bash
+   winget install --id Cloudflare.cloudflared
+   ```
+2. Run `npm run dev` (or `npm start`). The server starts a free quick tunnel to port 3001 and logs `Phone uploads -> https://….trycloudflare.com`. The URL changes on every start, which is fine because the QR code is generated live.
+3. On the booth, tap **Add a photo from your phone** in step 1. The customer scans the QR, picks a photo and taps **Send to booth**. The photo appears in the editor within a couple of seconds.
+
+**Own domain (optional):** run a named Cloudflare Tunnel that points at `http://127.0.0.1:3001` and set `PUBLIC_URL=https://upload.yourdomain.com` in `.env`. The quick tunnel is then skipped.
+
+**Privacy:** QR codes are single-use and expire after 10 minutes. Photos are stored only in the Python process's memory (3 h max, 60 photos max) and are dropped when they are removed, the batch is cleared, or the server stops.
 
 ---
 
