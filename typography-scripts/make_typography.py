@@ -142,14 +142,14 @@ def generate(text, color, background, font, font2=None, size=1024,
 
 
 # Caption box per shape: (max width, max height, vertical center), as fractions of the canvas.
-CAPTION_BOX = {'square': (.84, .22, .82), 'circle': (.66, .22, .75),
-               'hexagon': (.66, .22, .76), 'star': (.38, .18, .59)}
+CAPTION_BOX = {'square': (.84, .30, .79), 'circle': (.66, .28, .73),
+               'hexagon': (.66, .28, .74), 'star': (.38, .22, .57)}
 
 
 def generate_photo(photo, color, background, size=1024, shape='square', guide=False, *,
                    text='', font=None, font2=None, text2=None, style='regular', underline=False,
                    min_contrast=4.5):
-    """Die-cut a photo into shape, with an optional caption on a pill in the preset colors.
+    """Die-cut a photo into shape, with an optional caption on a rounded panel in the preset colors.
 
     photo is a PIL image. The caption follows generate()'s rules for fonts,
     styles and glyph coverage; without text no font is needed.
@@ -189,13 +189,14 @@ def generate_photo(photo, color, background, size=1024, shape='square', guide=Fa
                                     underline=underline or style == 'underline')
         caption = caption.crop(bounds)
         bw, bh, cy = CAPTION_BOX[shape]
-        px, py = max(2, round(size * .025)), max(2, round(size * .018))
-        text_height = min(round(size * (.065 if len(lines) == 1 else .14)), round(size * bh) - 2 * py)
+        px, py = max(2, round(size * .025)), max(2, round(size * .025))
+        text_height = min(round(size * (.12 if len(lines) == 1 else .24)), round(size * bh) - 2 * py)
         caption.thumbnail((round(size * bw) - 2 * px, text_height), Image.Resampling.LANCZOS)
-        w, h = caption.width + 2 * px, caption.height + 2 * py
+        w = max(caption.width + 2 * px, round(size * bw * .75))
+        h = caption.height + 2 * py
         x, y = (size - w) // 2, round(size * cy - h / 2)
         ImageDraw.Draw(canvas).rounded_rectangle((x, y, x + w - 1, y + h - 1), radius=max(2, round(size * .018)), fill=background)
-        canvas.paste(caption, (x + px, y + py))
+        canvas.paste(caption, (x + (w - caption.width) // 2, y + py))
     if guide:
         _draw_guide(canvas, size, shape, color)
     return canvas

@@ -83,6 +83,18 @@ for shape in server.make_typography.SHAPES:
 r = client.post('/render', json={**base, 'text': 'Sweet', 'text2': 'Dreams', 'family2': family, 'shape': 'circle', 'guide': True, 'size': 1024})
 assert r.status_code == 200, r.get_json()
 
+# Short, two-line script captions must not collapse into a tiny label.
+r = client.post('/render', json={**base, 'family': 'Autography', 'style': 'regular',
+                                 'text': 'Goed', 'text2': 'Koop', 'family2': 'Autography', 'shape': 'square'})
+assert r.status_code == 200, r.get_json()
+cap = Image.open(BytesIO(base64.b64decode(r.get_json()['png_base64'])))
+ink = Image.new('L', cap.size)
+ink.putdata([255 if max(pixel) < 130 else 0 for pixel in cap.getdata()])
+box = ink.getbbox()
+assert box and box[3] - box[1] >= 512 * .20, 'script caption is too small'
+panel = ImageChops.difference(Image.new('RGB', cap.size, '#3366CC'), cap).getbbox()
+assert panel[2] - panel[0] >= 512 * .60, 'caption panel is too narrow'
+
 # Unknown or deleted photo.
 assert client.post('/render', json={**base, 'text': '', 'shape': 'square', 'photo': 'gone'}).get_json()['code'] == 'photo_not_found'
 assert client.delete(f'/photo/{photo}').status_code == 204
