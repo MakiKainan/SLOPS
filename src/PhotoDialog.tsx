@@ -77,7 +77,7 @@ export default function PhotoDialog({ onPhoto, onClose }: { onPhoto: (id: string
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h2 id="photo-dialog-title" className="text-xl font-semibold">Add your photo</h2>
-          <p className="text-[15px] font-medium text-ink-soft">Scan with your phone camera, pick a photo, tap Send.</p>
+          <p className="text-[15px] font-medium text-ink-soft">Scan with your phone camera, pick a photo, adjust the crop, then tap Send.</p>
         </div>
         <button type="button" aria-label="Close" onClick={onClose} className="grid size-11 shrink-0 place-items-center rounded-full bg-tint hover:bg-tint-2">
           <X aria-hidden />

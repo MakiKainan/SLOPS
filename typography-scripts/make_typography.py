@@ -142,8 +142,8 @@ def generate(text, color, background, font, font2=None, size=1024,
 
 
 # Caption box per shape: (max width, max height, vertical center), as fractions of the canvas.
-CAPTION_BOX = {'square': (.84, .16, .84), 'circle': (.62, .14, .78),
-               'hexagon': (.62, .13, .80), 'star': (.30, .10, .66)}
+CAPTION_BOX = {'square': (.84, .22, .82), 'circle': (.66, .22, .75),
+               'hexagon': (.66, .22, .76), 'star': (.38, .18, .59)}
 
 
 def generate_photo(photo, color, background, size=1024, shape='square', guide=False, *,
@@ -178,7 +178,8 @@ def generate_photo(photo, color, background, size=1024, shape='square', guide=Fa
         if text2 is not None and text2.strip() and text.strip():
             lines = [text.strip(), text2.strip()]
         else:
-            lines = layout(text.strip() or text2.strip())
+            caption_text = text.strip() or text2.strip()
+            lines = [caption_text] if len(caption_text) <= 24 else layout(caption_text)
         fonts = [font, font2] if len(lines) == 2 and font2 else [font] * len(lines)
         for f, line in zip(fonts, lines):
             missing = font_coverage(f, line)
@@ -188,12 +189,13 @@ def generate_photo(photo, color, background, size=1024, shape='square', guide=Fa
                                     underline=underline or style == 'underline')
         caption = caption.crop(bounds)
         bw, bh, cy = CAPTION_BOX[shape]
-        pad = max(4, round(size * .025))
-        caption.thumbnail((round(size * bw) - 2 * pad, round(size * bh) - 2 * pad), Image.Resampling.LANCZOS)
-        w, h = caption.width + 2 * pad, caption.height + 2 * pad
+        px, py = max(2, round(size * .025)), max(2, round(size * .018))
+        text_height = min(round(size * (.065 if len(lines) == 1 else .14)), round(size * bh) - 2 * py)
+        caption.thumbnail((round(size * bw) - 2 * px, text_height), Image.Resampling.LANCZOS)
+        w, h = caption.width + 2 * px, caption.height + 2 * py
         x, y = (size - w) // 2, round(size * cy - h / 2)
-        ImageDraw.Draw(canvas).rounded_rectangle((x, y, x + w - 1, y + h - 1), radius=min(h // 2, pad * 2), fill=background)
-        canvas.paste(caption, (x + pad, y + pad))
+        ImageDraw.Draw(canvas).rounded_rectangle((x, y, x + w - 1, y + h - 1), radius=max(2, round(size * .018)), fill=background)
+        canvas.paste(caption, (x + px, y + py))
     if guide:
         _draw_guide(canvas, size, shape, color)
     return canvas

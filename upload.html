@@ -16,9 +16,28 @@
     .primary { background: var(--ink); color: var(--paper); }
     .secondary { background: var(--tint); color: var(--ink); }
     .btn:disabled { opacity: .5; cursor: default; }
-    img { width: 100%; max-height: 50dvh; object-fit: contain; border-radius: 20px; background: var(--tint); }
+    #preview { display: block; width: 100%; aspect-ratio: 1; border-radius: 16px; background: var(--tint); touch-action: none; cursor: grab; }
+    #preview:active { cursor: grabbing; }
+    #preview:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+    #crop { display: grid; gap: 12px; }
+    #zoom { width: 100%; min-height: 44px; accent-color: var(--ink); }
+    #crop label { font-weight: 600; }
     .error { background: var(--tomato-bg); color: var(--tomato-ink); border-radius: 16px; padding: 12px 16px; font-weight: 600; }
-    .done { font-size: 64px; text-align: center; margin: 8px 0 0; }
+    #sending { text-align: center; font-size: 15px; }
+    #send:disabled { opacity: 1; background: var(--ink-soft); gap: 12px; }
+    #send:disabled::before { content: ""; width: 18px; height: 18px; border: 2px solid #ffffff50; border-top-color: white; border-radius: 50%; animation: spin .8s linear infinite; }
+    #done { text-align: center; padding: 12px 0 4px; }
+    .photo-receipt { position: relative; width: 190px; margin: 8px auto 32px; padding: 10px 10px 28px; background: white; box-shadow: 0 8px 28px #17321020; transform: rotate(-4deg); border: 1px solid var(--tint); border-radius: 8px; }
+    #sentPhoto { display: block; width: 100%; aspect-ratio: 1; border-radius: 4px; }
+    .received-mark { position: absolute; right: -14px; bottom: -14px; width: 52px; height: 52px; display: grid; place-items: center; border: 5px solid white; border-radius: 50%; background: var(--ink); color: white; }
+    .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+    #done h2 { font-size: 30px; line-height: 1.15; margin: 10px 0 12px; letter-spacing: -.03em; }
+    .next-step { margin-top: 24px; padding: 18px; border-radius: 18px; background: var(--tint); text-align: left; }
+    .next-step strong { display: block; margin-bottom: 6px; }
+    .next-step p { font-size: 15px; }
+    .close-note { margin-top: 20px; font-size: 13px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { #send:disabled::before { animation: none; } }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -26,68 +45,146 @@
   <main>
     <h1>SLOPS</h1>
     <section id="pick">
-      <p>Choose a photo and we'll send it straight to the sticker booth.</p>
+      <p>Choose a photo, adjust the crop, then send it to the sticker booth.</p>
     </section>
-    <img id="preview" alt="Your photo" hidden />
+    <section id="crop" hidden aria-label="Crop your photo">
+      <p id="cropHelp">Drag to position your photo. Zoom in to choose the part you want.</p>
+      <canvas id="preview" width="640" height="640" tabindex="0" role="img" aria-label="Photo crop preview. Use arrow keys to move the photo." aria-describedby="cropHelp"></canvas>
+      <label for="zoom">Zoom</label>
+      <input id="zoom" type="range" min="1" max="4" step="0.01" value="1" />
+      <button class="btn secondary" id="reset" type="button">Reset crop</button>
+      <p>The booth uses this square crop. Your sticker shape may trim the edges.</p>
+    </section>
     <p id="error" class="error" role="alert" hidden></p>
-    <label class="btn secondary" id="chooseLabel" for="file">Choose photo</label>
+    <button class="btn secondary" id="chooseLabel" type="button">Choose photo</button>
     <input id="file" type="file" accept="image/*" hidden />
     <button class="btn primary" id="send" type="button" hidden>Send to booth</button>
-    <section id="done" hidden>
-      <p class="done" aria-hidden="true">🎉</p>
-      <h1>Sent!</h1>
-      <p>Look at the booth screen. Your photo is there now.</p>
+    <p id="sending" role="status" hidden>Keep this page open while your photo travels to the booth.</p>
+    <section id="done" hidden aria-labelledby="sentTitle" tabindex="-1">
+      <div class="photo-receipt">
+        <canvas id="sentPhoto" width="320" height="320" role="img" aria-label="Your sent photo"></canvas>
+        <span class="received-mark" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      </div>
+      <p class="eyebrow">Photo received</p>
+      <h2 id="sentTitle">Over to the booth.</h2>
+      <p>Your crop is ready for its sticker moment.</p>
+      <div class="next-step"><strong>Continue on the booth screen</strong><p>Choose your sticker shape and size, then make it yours.</p></div>
+      <p class="close-note">All done here. You can close this page.</p>
     </section>
   </main>
   <script>
     const MAX_SIDE = 2048;
     const token = location.pathname.split("/").filter(Boolean).pop();
     const $ = (id) => document.getElementById(id);
-    let blob = null;
-
+    let photo = null;
+    let cropSize = 0, cropX = 0, cropY = 0;
+    let selection = 0, drag = null;
     const showError = (msg) => { $("error").textContent = msg; $("error").hidden = !msg; };
 
-    // Shrink on the phone so uploads are quick on mobile data. Browsers also decode HEIC here.
-    async function shrink(file) {
-      try {
-        const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-        const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(bitmap.width * scale);
-        canvas.height = Math.round(bitmap.height * scale);
-        const ctx = canvas.getContext("2d");
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-        return await new Promise((resolve) => canvas.toBlob((b) => resolve(b || file), "image/jpeg", 0.9));
-      } catch {
-        return file; // let the booth try to read the original
-      }
+    function drawCrop(canvas) {
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(photo, cropX, cropY, cropSize, cropSize, 0, 0, canvas.width, canvas.height);
     }
 
+    function updateCrop() {
+      cropX = Math.max(0, Math.min(photo.naturalWidth - cropSize, cropX));
+      cropY = Math.max(0, Math.min(photo.naturalHeight - cropSize, cropY));
+      drawCrop($("preview"));
+    }
+
+    function resetCrop() {
+      $("zoom").value = "1";
+      cropSize = Math.min(photo.naturalWidth, photo.naturalHeight);
+      cropX = (photo.naturalWidth - cropSize) / 2;
+      cropY = (photo.naturalHeight - cropSize) / 2;
+      updateCrop();
+    }
+
+    $("chooseLabel").addEventListener("click", () => $("file").click());
     $("file").addEventListener("change", async () => {
       const file = $("file").files[0];
       if (!file) return;
+      const current = ++selection;
       showError("");
-      blob = await shrink(file);
-      $("preview").src = URL.createObjectURL(blob);
-      $("preview").hidden = false;
-      $("send").hidden = false;
-      $("chooseLabel").textContent = "Choose another";
+      photo = null;
+      $("crop").hidden = $("send").hidden = true;
+      const url = URL.createObjectURL(file);
+      try {
+        const image = new Image();
+        image.src = url;
+        await image.decode();
+        if (current !== selection) return;
+        photo = image;
+        resetCrop();
+        $("crop").hidden = $("send").hidden = false;
+        $("chooseLabel").textContent = "Choose another";
+      } catch {
+        if (current === selection) showError("This phone couldn't open that photo. Try a JPEG or PNG image.");
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    });
+
+    $("zoom").addEventListener("input", () => {
+      if (!photo) return;
+      const size = Math.min(photo.naturalWidth, photo.naturalHeight) / Number($("zoom").value);
+      cropX += (cropSize - size) / 2;
+      cropY += (cropSize - size) / 2;
+      cropSize = size;
+      updateCrop();
+    });
+    $("reset").addEventListener("click", () => { if (photo) resetCrop(); });
+    $("preview").addEventListener("pointerdown", (event) => {
+      if (!photo || $("send").disabled || drag) return;
+      drag = { id: event.pointerId, x: event.clientX, y: event.clientY };
+      $("preview").setPointerCapture(event.pointerId);
+    });
+    $("preview").addEventListener("pointermove", (event) => {
+      if (!drag || drag.id !== event.pointerId) return;
+      const scale = cropSize / $("preview").getBoundingClientRect().width;
+      cropX -= (event.clientX - drag.x) * scale;
+      cropY -= (event.clientY - drag.y) * scale;
+      drag.x = event.clientX;
+      drag.y = event.clientY;
+      updateCrop();
+    });
+    for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) {
+      $("preview").addEventListener(type, () => { drag = null; });
+    }
+    $("preview").addEventListener("keydown", (event) => {
+      if (!photo || $("send").disabled) return;
+      const direction = { ArrowLeft: [1, 0], ArrowRight: [-1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[event.key];
+      if (!direction) return;
+      event.preventDefault();
+      cropX += direction[0] * cropSize / 20;
+      cropY += direction[1] * cropSize / 20;
+      updateCrop();
     });
 
     $("send").addEventListener("click", async () => {
-      if (!blob) return;
+      if (!photo || $("send").disabled) return;
       $("send").disabled = true;
-      $("send").textContent = "Sending…";
+      $("send").textContent = "Sending your photo…";
+      $("sending").hidden = false;
+      for (const id of ["file", "chooseLabel", "zoom", "reset"]) $(id).disabled = true;
+      drag = null;
       showError("");
-      const body = new FormData();
-      body.append("photo", blob, "photo.jpg");
       try {
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = Math.max(1, Math.min(MAX_SIDE, Math.round(cropSize)));
+        drawCrop(canvas);
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
+        if (!blob) throw new Error("crop_failed");
+        const body = new FormData();
+        body.append("photo", blob, "photo.jpg");
         const res = await fetch(location.pathname, { method: "POST", body });
         if (res.ok) {
-          for (const id of ["pick", "preview", "send", "chooseLabel"]) $(id).hidden = true;
+          for (const id of ["pick", "crop", "send", "chooseLabel", "sending"]) $(id).hidden = true;
+          drawCrop($("sentPhoto"));
           $("done").hidden = false;
+          $("done").focus();
           return;
         }
         const json = await res.json().catch(() => ({}));
@@ -95,10 +192,11 @@
         else if (json.code === "bad_image") showError("We couldn't read that file. Try a different photo.");
         else if (res.status === 413) showError("That photo is too big. Try a different one.");
         else showError("Something went wrong. Try again.");
-      } catch {
-        showError("No connection. Check your internet and try again.");
+      } catch (error) {
+        showError(error.message === "crop_failed" ? "Couldn't prepare the crop. Try another photo." : "Couldn't send your photo. Check your connection and try again.");
       }
-      $("send").disabled = false;
+      for (const id of ["send", "file", "chooseLabel", "zoom", "reset"]) $(id).disabled = false;
+      $("sending").hidden = true;
       $("send").textContent = "Send to booth";
     });
 

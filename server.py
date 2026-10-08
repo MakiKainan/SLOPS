@@ -22,7 +22,7 @@ sys.path.insert(0, str(ENGINE_DIR))
 
 import font_catalog
 import make_typography
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, Request, jsonify, request, send_file
 from PIL import Image, ImageOps, UnidentifiedImageError
 from werkzeug.exceptions import HTTPException
 
@@ -37,7 +37,15 @@ except Exception as e:
     traceback.print_exc()
     sys.exit(1)
 
+class BoothRequest(Request):
+    @property
+    def max_content_length(self):
+        # Flask 3.0 has no per-request setter; select the limit before body parsing.
+        return UPLOAD_MAX_BYTES if self.endpoint == "upload_photo" else super().max_content_length
+
+
 app = Flask(__name__, static_folder=None)
+app.request_class = BoothRequest
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
 
 RENDER_LOCK = threading.Lock()
@@ -202,7 +210,6 @@ def photo_session_status(token):
 
 @app.post("/upload/<token>")
 def upload_photo(token):
-    request.max_content_length = UPLOAD_MAX_BYTES
     with STORE_LOCK:
         _sweep(time.time())
         s = SESSIONS.get(token)

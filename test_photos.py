@@ -41,6 +41,12 @@ server.SESSIONS[token]['expires'] = 0
 assert upload(token, png()).status_code == 410
 
 # Bad uploads.
+# Photos can exceed the normal JSON limit without relaxing it for /render.
+buf = BytesIO()
+Image.new('RGB', (150, 150), '#3366CC').save(buf, format='PNG', compress_level=0)
+assert len(buf.getvalue()) > server.app.config['MAX_CONTENT_LENGTH']
+assert upload(new_session(), buf.getvalue()).status_code == 200
+assert client.post('/render', json={'text': 'x' * (17 * 1024)}).status_code == 413
 assert upload(new_session(), b'not an image', 'x.jpg').status_code == 422
 assert upload(new_session(), b'0' * (16 * 1024 * 1024)).status_code == 413
 assert client.post(f'/upload/{new_session()}', data={}, content_type='multipart/form-data').status_code == 400
@@ -70,6 +76,10 @@ for shape in server.make_typography.SHAPES:
     assert captioned.status_code == 200, captioned.get_json()
     cap = Image.open(BytesIO(base64.b64decode(captioned.get_json()['png_base64'])))
     assert ImageChops.difference(img, cap).getbbox(), f'caption missing on {shape}'
+    # Captions must stay inside the cut shape, including the narrow star.
+    for original, caption_pixel in zip(img.getdata(), cap.getdata()):
+        if original == (255, 255, 255):
+            assert caption_pixel == original, f'caption crosses {shape} cut edge'
 r = client.post('/render', json={**base, 'text': 'Sweet', 'text2': 'Dreams', 'family2': family, 'shape': 'circle', 'guide': True, 'size': 1024})
 assert r.status_code == 200, r.get_json()
 
