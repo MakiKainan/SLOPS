@@ -283,6 +283,8 @@ def render():
         return err(400, "invalid_request", "Field 'guide' must be a boolean")
     if not isinstance(b.get("underline", False), bool):
         return err(400, "invalid_request", "Field 'underline' must be a boolean")
+    if not isinstance(b.get("caption_background", True), bool):
+        return err(400, "invalid_request", "Field 'caption_background' must be a boolean")
     if not isinstance(b["size"], int) or isinstance(b["size"], bool):
         return err(400, "invalid_request", "Field 'size' must be an integer")
 
@@ -333,6 +335,7 @@ def render():
                         text2=b.get("text2"),
                         style=b["style"],
                         underline=b.get("underline", False),
+                        caption_background=b.get("caption_background", True),
                     )
                 else:
                     img = make_typography.generate(

@@ -96,6 +96,27 @@ panel = ImageChops.difference(Image.new('RGB', cap.size, '#3366CC'), cap).getbbo
 assert panel[2] - panel[0] >= 512 * .60, 'caption panel is too narrow'
 
 # Unknown or deleted photo.
+for size in (512, 1024):
+    for shape in server.make_typography.SHAPES:
+        request = {**base, 'text': 'Sweet', 'text2': 'Cat', 'family2': family,
+                   'shape': shape, 'size': size, 'underline': True}
+        images = []
+        for panel in (True, False):
+            r = client.post('/render', json={**request, 'caption_background': panel})
+            assert r.status_code == 200, r.get_json()
+            images.append(Image.open(BytesIO(base64.b64decode(r.get_json()['png_base64']))))
+        assert ImageChops.difference(*images).getbbox(), 'toggle must change the render'
+        pixels = list(images[1].getdata())
+        assert (255, 240, 207) not in pixels, 'caption panel remains'
+        assert (23, 23, 23) in pixels, 'caption ink missing'
+        assert (51, 102, 204) in pixels, 'photo missing'
+        # Changing the unused panel color must have no effect on transparent captions.
+        r = client.post('/render', json={**request, 'caption_background': False, 'background': '#171717'})
+        same = Image.open(BytesIO(base64.b64decode(r.get_json()['png_base64'])))
+        assert not ImageChops.difference(same, images[1]).getbbox()
+assert client.post('/render', json={**base, 'text': 'Hi', 'shape': 'square', 'caption_background': 'false'}).status_code == 400
+
+# Unknown or deleted photo.
 assert client.post('/render', json={**base, 'text': '', 'shape': 'square', 'photo': 'gone'}).get_json()['code'] == 'photo_not_found'
 assert client.delete(f'/photo/{photo}').status_code == 204
 assert client.get(f'/photo/{photo}').status_code == 404

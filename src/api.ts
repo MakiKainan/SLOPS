@@ -30,6 +30,7 @@ export interface RenderPayload {
   size: 512 | 1024;
   /** Id of an uploaded photo; the text becomes an optional caption. */
   photo?: string;
+  caption_background?: boolean;
 }
 
 export type RenderResult =

@@ -30,11 +30,12 @@ interface Design {
   size: Size;
   /** Uploaded photo id; when set, the text is an optional caption. */
   photo: string | null;
+  captionBackground: boolean;
 }
 
 type SheetSlot = Slot & { design: Design };
 
-const DEFAULT_DESIGN: Design = { text: "", mixFonts: false, text2: "", family2: null, family: null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "l", photo: null };
+const DEFAULT_DESIGN: Design = { text: "", mixFonts: false, text2: "", family2: null, family: null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "l", photo: null, captionBackground: true };
 const UNDO_MS = 6500;
 
 function isNearWhite(hex: string) {
@@ -141,9 +142,9 @@ export default function App() {
   const payload = useMemo<RenderPayload | null>(() => {
     if (!d.family || !preset) return null;
     const look = { family: d.family, style: (d.bold ? (d.italic ? "bold-italic" : "bold") : (d.italic ? "italic" : "regular")) as Style, underline: d.underline, foreground: preset.foreground, background: preset.background, shape: d.shape, guide: d.guide, size: 512 as const };
-    if (d.photo) return { ...look, photo: d.photo, text: cleanText, ...(d.mixFonts && cleanText2 ? { text2: cleanText2, family2: d.family2 || d.family } : {}) };
+    if (d.photo) return { ...look, photo: d.photo, caption_background: d.captionBackground, text: cleanText, ...(d.mixFonts && cleanText2 ? { text2: cleanText2, family2: d.family2 || d.family } : {}) };
     return { ...look, text: cleanText || (d.mixFonts ? "Your" : SAMPLE), ...(d.mixFonts ? { text2: cleanText2 || "Name", family2: d.family2 || d.family } : {}), gradient: preset.gradient };
-  }, [cleanText, cleanText2, d.mixFonts, d.family2, d.family, d.bold, d.italic, d.underline, d.shape, d.guide, d.photo, preset]);
+  }, [cleanText, cleanText2, d.mixFonts, d.family2, d.family, d.bold, d.italic, d.underline, d.shape, d.guide, d.photo, d.captionBackground, preset]);
   const { result, busy, retry } = useRender(payload);
 
   const selectFamily = (family: string) => update(d.mixFonts && fontPart === 2 ? { family2: family } : { family });
@@ -358,6 +359,12 @@ export default function App() {
                 onChange={(e) => update({ text: e.target.value })}
                 className="h-14 w-full rounded-2xl border-2 border-line bg-tint px-5 text-[22px] font-medium placeholder:text-ink-soft/70 focus:border-ink focus:outline-none"
               />
+              {d.photo && (cleanText || (d.mixFonts && cleanText2)) && (
+                <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-2xl bg-tint px-4 py-3 font-medium">
+                  <input type="checkbox" checked={!d.captionBackground} onChange={(e) => update({ captionBackground: !e.target.checked })} className="size-5 accent-ink" />
+                  <span>Remove text background<span className="block text-sm font-normal text-ink-soft">Keep the caption directly on your photo.</span></span>
+                </label>
+              )}
               <button type="button" aria-pressed={d.mixFonts} onClick={() => {
                 if (d.mixFonts) {
                   update({ mixFonts: false, text: [d.text, d.text2].filter(Boolean).join(" ") });

@@ -148,7 +148,7 @@ CAPTION_BOX = {'square': (.84, .30, .79), 'circle': (.66, .28, .73),
 
 def generate_photo(photo, color, background, size=1024, shape='square', guide=False, *,
                    text='', font=None, font2=None, text2=None, style='regular', underline=False,
-                   min_contrast=4.5):
+                   min_contrast=4.5, caption_background=True):
     """Die-cut a photo into shape, with an optional caption on a rounded panel in the preset colors.
 
     photo is a PIL image. The caption follows generate()'s rules for fonts,
@@ -166,7 +166,7 @@ def generate_photo(photo, color, background, size=1024, shape='square', guide=Fa
         raise ValueError(f'Invalid color: {exc}') from exc
     canvas = _shape_canvas(size, ImageOps.fit(photo.convert('RGB'), (size, size), Image.Resampling.LANCZOS), shape)
     if text.strip() or (text2 or '').strip():
-        if ratio < min_contrast:
+        if caption_background and ratio < min_contrast:
             warnings.warn(f'contrast {ratio:.2f}:1 is below recommended {min_contrast}:1', UserWarning)
         font = Path(font)
         if not font.is_file():
@@ -185,7 +185,8 @@ def generate_photo(photo, color, background, size=1024, shape='square', guide=Fa
             missing = font_coverage(f, line)
             if missing:
                 raise ValueError(f'{f} lacks these characters: {missing}')
-        caption, bounds, _ = render(fonts, lines, color, size, background, style=style,
+        ink, paper = (color, background) if caption_background else ('#FFFFFF', '#000000')
+        caption, bounds, _ = render(fonts, lines, ink, size, paper, style=style,
                                     underline=underline or style == 'underline')
         caption = caption.crop(bounds)
         bw, bh, cy = CAPTION_BOX[shape]
@@ -195,8 +196,12 @@ def generate_photo(photo, color, background, size=1024, shape='square', guide=Fa
         w = max(caption.width + 2 * px, round(size * bw * .75))
         h = caption.height + 2 * py
         x, y = (size - w) // 2, round(size * cy - h / 2)
-        ImageDraw.Draw(canvas).rounded_rectangle((x, y, x + w - 1, y + h - 1), radius=max(2, round(size * .018)), fill=background)
-        canvas.paste(caption, (x + (w - caption.width) // 2, y + py))
+        position = (x + (w - caption.width) // 2, y + py)
+        if caption_background:
+            ImageDraw.Draw(canvas).rounded_rectangle((x, y, x + w - 1, y + h - 1), radius=max(2, round(size * .018)), fill=background)
+            canvas.paste(caption, position)
+        else:
+            canvas.paste(color, (*position, position[0] + caption.width, position[1] + caption.height), caption.convert('L'))
     if guide:
         _draw_guide(canvas, size, shape, color)
     return canvas
