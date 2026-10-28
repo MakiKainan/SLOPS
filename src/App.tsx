@@ -35,7 +35,7 @@ interface Design {
 
 type SheetSlot = Slot & { design: Design };
 
-const DEFAULT_DESIGN: Design = { text: "", mixFonts: false, text2: "", family2: null, family: null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "l", photo: null, captionBackground: true };
+const DEFAULT_DESIGN: Design = { text: "", mixFonts: false, text2: "", family2: null, family: null, bold: false, italic: false, underline: false, preset: 0, shape: "square", guide: false, size: "m", photo: null, captionBackground: true };
 const UNDO_MS = 6500;
 
 function isNearWhite(hex: string) {

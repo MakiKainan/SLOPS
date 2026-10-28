@@ -4,10 +4,9 @@ import { Check, Eraser, Printer, X } from "lucide-react";
 import type { Size } from "./api";
 
 export const SIZES: Record<Size, { label: string; mm: number }> = {
-  s: { label: "Small", mm: 25 },
-  m: { label: "Medium", mm: 45 },
-  l: { label: "Large", mm: 65 },
-  xl: { label: "Extra large", mm: 95 },
+  s: { label: "Small", mm: 45 },
+  m: { label: "Medium", mm: 65 },
+  l: { label: "Large", mm: 95 },
 };
 
 // One quarter of A4, and the minimum gap kept around every sticker (all mm).

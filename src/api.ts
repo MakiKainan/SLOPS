@@ -1,6 +1,6 @@
 export type Style = "regular" | "bold" | "italic" | "bold-italic" | "underline";
 export type Shape = "square" | "circle" | "hexagon" | "star";
-export type Size = "s" | "m" | "l" | "xl";
+export type Size = "s" | "m" | "l";
 
 export interface FontFamily {
   family: string;
